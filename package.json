@@ -1,9 +1,12 @@
 {
   "name": "infrasentinel",
+  "private": true,
+  "packageManager": "pnpm@11.11.0",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
+    "dev": "concurrently -n web,api,ai -c blue,green,yellow \"pnpm --filter web dev\" \"pnpm --filter api start:dev\" \"apps\\\\ai-service\\\\venv\\\\Scripts\\\\python.exe -m uvicorn main:app --reload --port 8000 --app-dir apps/ai-service\"",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -16,5 +19,8 @@
       "onFail": "download"
     }
   },
-  "type": "module"
+  "type": "module",
+  "devDependencies": {
+    "concurrently": "^10.0.3"
+  }
 }
