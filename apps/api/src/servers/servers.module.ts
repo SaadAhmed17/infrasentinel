@@ -1,0 +1,11 @@
+import { Module } from '@nestjs/common';
+import { ServersService } from './servers.service';
+import { ServersController } from './servers.controller';
+import { MetricsIngestionController } from './metrics-ingestion.controller';
+import { ApiKeyGuard } from './guards/api-key.guard';
+
+@Module({
+  controllers: [ServersController, MetricsIngestionController],
+  providers: [ServersService, ApiKeyGuard],
+})
+export class ServersModule {}
