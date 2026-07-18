@@ -1,8 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateServerDto } from './dto/create-server.dto';
-import * as crypto from 'crypto';
 import { IngestMetricDto } from './dto/ingest-metric.dto';
+import * as crypto from 'crypto';
+
 @Injectable()
 export class ServersService {
   constructor(private prisma: PrismaService) {}
@@ -23,7 +24,10 @@ export class ServersService {
   async ingestMetric(serverId: string, dto: IngestMetricDto) {
     await this.prisma.server.update({
       where: { id: serverId },
-      data: { status: 'ONLINE', lastHeartbeat: new Date() },
+      data: {
+        status: 'ONLINE',
+        lastHeartbeat: new Date(),
+      },
     });
 
     return this.prisma.metric.create({
@@ -46,14 +50,35 @@ export class ServersService {
         status: true,
         lastHeartbeat: true,
         createdAt: true,
-        // deliberately NOT selecting apiKey — never re-expose it after creation
       },
     });
   }
 
+  async getServerMetrics(organizationId: string, serverId: string, limit = 50) {
+    const server = await this.prisma.server.findFirst({
+      where: { id: serverId, organizationId },
+    });
+    if (!server) throw new NotFoundException('Server not found');
+
+    const metrics = await this.prisma.metric.findMany({
+      where: { serverId },
+      orderBy: { timestamp: 'desc' },
+      take: limit,
+    });
+
+    return { server, metrics: metrics.reverse() };
+   }
+  
+
   async findByApiKey(apiKey: string) {
-    const server = await this.prisma.server.findUnique({ where: { apiKey } });
-    if (!server) throw new NotFoundException('Invalid API key');
+    const server = await this.prisma.server.findUnique({
+      where: { apiKey },
+    });
+
+    if (!server) {
+      throw new NotFoundException('Invalid API key');
+    }
+
     return server;
   }
 }

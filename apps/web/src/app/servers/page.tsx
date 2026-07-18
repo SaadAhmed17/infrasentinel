@@ -139,7 +139,11 @@ function ServersContent() {
             <tbody>
               {servers.map((s) => (
                 <tr key={s.id} className="border-b last:border-0">
-                  <td className="py-2">{s.name}</td>
+                  <td className="py-2">
+  <Link href={`/servers/${s.id}`} className="text-blue-600 hover:underline">
+    {s.name}
+  </Link>
+</td>
                   <td className="py-2">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColor(s.status)}`}>
                       {s.status}
