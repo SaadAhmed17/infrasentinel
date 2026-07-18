@@ -1,9 +1,14 @@
-import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ServersService } from '../servers.service';
 
 interface RequestWithHeaders {
   headers: Record<string, string | undefined>;
-   monitoredServer?: unknown;
+  monitoredServer?: unknown;
 }
 
 @Injectable()

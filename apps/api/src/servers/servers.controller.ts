@@ -15,7 +15,10 @@ export class ServersController {
   @Post()
   @UseGuards(RolesGuard)
   @Roles('OWNER', 'ADMIN', 'DEVOPS_ENGINEER')
-  createServer(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateServerDto) {
+  createServer(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateServerDto,
+  ) {
     return this.serversService.createServer(user.organizationId, dto);
   }
 

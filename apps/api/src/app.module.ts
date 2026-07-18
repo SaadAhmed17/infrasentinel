@@ -5,7 +5,6 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { OrganizationsModule } from './organizations/organizations.module';
 import { ServersModule } from './servers/servers.module';
-import * as crypto from 'crypto';
 
 @Module({
   imports: [PrismaModule, AuthModule, OrganizationsModule, ServersModule],

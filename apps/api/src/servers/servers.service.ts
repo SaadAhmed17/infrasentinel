@@ -16,22 +16,22 @@ export class ServersService {
         hostname: dto.hostname,
         apiKey,
         organizationId,
-       },
-   });
-    }
+      },
+    });
+  }
 
   async ingestMetric(serverId: string, dto: IngestMetricDto) {
     await this.prisma.server.update({
-    where: { id: serverId },
-    data: { status: 'ONLINE', lastHeartbeat: new Date() },
-        });
+      where: { id: serverId },
+      data: { status: 'ONLINE', lastHeartbeat: new Date() },
+    });
 
     return this.prisma.metric.create({
-    data: {
-      serverId,
-      cpuUsage: dto.cpuUsage,
-      memUsage: dto.memUsage,
-      diskUsage: dto.diskUsage,
+      data: {
+        serverId,
+        cpuUsage: dto.cpuUsage,
+        memUsage: dto.memUsage,
+        diskUsage: dto.diskUsage,
       },
     });
   }
@@ -57,5 +57,3 @@ export class ServersService {
     return server;
   }
 }
-
-    
