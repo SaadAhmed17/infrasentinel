@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { ProtectedRoute } from '@/components/protected-route';
 import { apiClient } from '@/lib/api-client';
+import Link from 'next/link';
 
 interface Member {
   id: string;
@@ -32,11 +33,17 @@ function DashboardContent() {
             <h1 className="text-xl font-semibold">InfraSentinel Dashboard</h1>
             <p className="text-sm text-gray-600">Logged in as {user?.email} ({user?.role})</p>
           </div>
+
+         <div className="flex items-center gap-3">
+        <Link href="/servers" className="text-sm text-blue-600 hover:underline">
+        Servers
+        </Link>
+
           <button onClick={logout} className="rounded-md border px-4 py-2 text-sm hover:bg-gray-100">
             Log out
           </button>
         </div>
-
+        </div>
         <div className="rounded-lg border bg-white p-6 shadow-sm">
           <h2 className="mb-4 text-lg font-medium">Organization Members</h2>
           {error && <p className="text-sm text-red-600">{error}</p>}
