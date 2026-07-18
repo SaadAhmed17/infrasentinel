@@ -19,10 +19,9 @@ export class AuthController {
     return this.authService.login(dto);
   }
   @Post('accept-invitation')
-@HttpCode(HttpStatus.OK)
-acceptInvitation(@Body() dto: AcceptInvitationDto) {
-  return this.authService.acceptInvitation(dto);
-}
-
+  @HttpCode(HttpStatus.OK)
+  acceptInvitation(@Body() dto: AcceptInvitationDto) {
+    return this.authService.acceptInvitation(dto);
+  }
 }
 // inside the AuthController class, alongside signup/login:

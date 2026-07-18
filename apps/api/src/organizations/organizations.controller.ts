@@ -6,6 +6,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
+import type { AuthenticatedUser } from 'src/auth/types/authenticated-user.type';
 
 @Controller('organizations')
 @UseGuards(JwtAuthGuard)
@@ -13,33 +14,39 @@ export class OrganizationsController {
   constructor(private orgService: OrganizationsService) {}
 
   @Get('me')
-  getMyOrg(@CurrentUser() user: any) {
+  getMyOrg(@CurrentUser() user: AuthenticatedUser) {
     return this.orgService.getMyOrganization(user.organizationId);
   }
 
   @Get('members')
-  listMembers(@CurrentUser() user: any) {
+  listMembers(@CurrentUser() user: AuthenticatedUser) {
     return this.orgService.listMembers(user.organizationId);
   }
 
   @Patch('settings')
   @UseGuards(RolesGuard)
   @Roles('OWNER', 'ADMIN')
-  updateSettings(@CurrentUser() user: any, @Body() dto: UpdateOrganizationDto) {
+  updateSettings(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdateOrganizationDto,
+  ) {
     return this.orgService.updateOrganization(user.organizationId, dto);
   }
 
   @Post('invitations')
   @UseGuards(RolesGuard)
   @Roles('OWNER', 'ADMIN')
-  createInvitation(@CurrentUser() user: any, @Body() dto: CreateInvitationDto) {
+  createInvitation(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateInvitationDto,
+  ) {
     return this.orgService.createInvitation(user.organizationId, dto);
   }
 
   @Get('invitations')
   @UseGuards(RolesGuard)
   @Roles('OWNER', 'ADMIN')
-  listInvitations(@CurrentUser() user: any) {
+  listInvitations(@CurrentUser() user: AuthenticatedUser) {
     return this.orgService.listInvitations(user.organizationId);
   }
 }
