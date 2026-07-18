@@ -70,4 +70,38 @@ export class AuthService {
 
     return { accessToken, refreshToken };
   }
+
+  async acceptInvitation(dto: { token: string; password: string }) {
+  const invitation = await this.prisma.invitation.findUnique({ where: { token: dto.token } });
+
+  if (!invitation || invitation.status !== 'PENDING') {
+    throw new UnauthorizedException('Invalid or already-used invitation');
+  }
+  if (invitation.expiresAt < new Date()) {
+    throw new UnauthorizedException('This invitation has expired');
+  }
+
+  const passwordHash = await bcrypt.hash(dto.password, 10);
+
+  const result = await this.prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: {
+        email: invitation.email,
+        passwordHash,
+        role: invitation.role,
+        organizationId: invitation.organizationId,
+      },
+    });
+
+    await tx.invitation.update({
+      where: { id: invitation.id },
+      data: { status: 'ACCEPTED' },
+    });
+
+    return user;
+  });
+
+  return this.issueTokens(result.id, result.email, result.role, result.organizationId);
+}
+
 }
