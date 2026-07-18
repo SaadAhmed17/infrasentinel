@@ -31,6 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (token) {
       try {
         const payload = JSON.parse(atob(token.split('.')[1]));
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- reading localStorage (browser-only, unavailable during SSR) to hydrate initial auth state; this is the correct pattern here, not a derivable-during-render case.
         setUser({ userId: payload.sub, email: payload.email, role: payload.role, organizationId: payload.organizationId });
       } catch {
         localStorage.removeItem('accessToken');
