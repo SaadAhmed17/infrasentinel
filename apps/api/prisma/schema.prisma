@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  users     User[]
+  invitations Invitation[]
+  servers     Server[]
+}
+
+enum ServerStatus {
+  ONLINE
+  OFFLINE
+  UNKNOWN
+}
+
+model Server {
+  id             String       @id @default(uuid())
+  name           String
+  hostname       String?
+  apiKey         String       @unique
+  status         ServerStatus @default(UNKNOWN)
+  lastHeartbeat  DateTime?
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  metrics        Metric[]
+  createdAt      DateTime     @default(now())
+}
+
+model Metric {
+  id        String   @id @default(uuid())
+  serverId  String
+  server    Server   @relation(fields: [serverId], references: [id])
+  cpuUsage  Float
+  memUsage  Float
+  diskUsage Float
+  timestamp DateTime @default(now())
+
+  @@index([serverId, timestamp])
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+}
+
+model Invitation {
+  id             String            @id @default(uuid())
+  email          String
+  role           Role              @default(VIEWER)
+  token          String            @unique
+  status         InvitationStatus  @default(PENDING)
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  expiresAt      DateTime
+  createdAt      DateTime          @default(now())
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  SECURITY_ANALYST
+  DEVOPS_ENGINEER
+  DEVELOPER
+  VIEWER
+}
+
+model User {
+  id             String       @id @default(uuid())
+  email          String       @unique
+  passwordHash   String
+  role           Role         @default(VIEWER)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime     @default(now())
+}

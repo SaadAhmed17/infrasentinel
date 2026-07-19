@@ -1,3 +1,10 @@
 packages:
   - "apps/*"
   - "packages/*"
+allowBuilds:
+  '@prisma/client': false
+  '@prisma/engines': false
+  bcrypt: true
+  prisma: false
+  sharp: true
+  unrs-resolver: true
