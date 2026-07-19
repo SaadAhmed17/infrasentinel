@@ -18,8 +18,17 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.listen(process.env.PORT ?? 3001, '0.0.0.0');
   console.log(`API running on port ${process.env.PORT ?? 3001}`);
+
+  async function bootstrap() {
+  const app = await NestFactory.create<NestFastifyApplication>(
+    AppModule,
+    new FastifyAdapter(),
+    { logger: ['error', 'warn', 'log', 'debug'] },
+  );
+}
 }
 bootstrap().catch((err) => {
   console.error('Failed to start application:', err);
   process.exit(1);
 });
+
