@@ -14,6 +14,8 @@ model Organization {
   users     User[]
   invitations Invitation[]
   servers     Server[]
+  rules       Rule[]
+  incidents   Incident[]
 }
 
 enum ServerStatus {
@@ -32,7 +34,115 @@ model Server {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   metrics        Metric[]
+  alerts         Alert[]
   createdAt      DateTime     @default(now())
+}
+
+enum EventSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+model Event {
+  id             String        @id @default(uuid())
+  eventType      String        // e.g. "AUTH_LOGIN_FAILURE" — plain string, extensible without migrations
+  source         String        // e.g. "auth-service"
+  severity       EventSeverity @default(INFO)
+  message        String
+  metadata       Json          // flexible per-event details (ipAddress, email, etc.)
+  organizationId String?       // nullable: some events (bad login on unknown email) have no org yet
+  createdAt      DateTime      @default(now())
+
+  @@index([eventType, createdAt])
+  @@index([organizationId, createdAt])
+}
+
+enum RuleType {
+  METRIC_THRESHOLD
+  EVENT_FREQUENCY
+}
+
+enum MetricField {
+  CPU_USAGE
+  MEM_USAGE
+  DISK_USAGE
+}
+
+enum ComparisonOperator {
+  GREATER_THAN
+  LESS_THAN
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model Rule {
+  id              String              @id @default(uuid())
+  name            String
+  ruleType        RuleType
+
+  // Used when ruleType = METRIC_THRESHOLD
+  metricField     MetricField?
+  operator        ComparisonOperator?
+  threshold       Float?
+  durationSeconds Int                 @default(60)
+
+  // Used when ruleType = EVENT_FREQUENCY
+  eventType       String?             // which event to count, e.g. "AUTH_LOGIN_FAILURE"
+  groupByField    String?             // which metadata field to group by, e.g. "ipAddress"
+  maxCount        Int?                // how many before it fires, e.g. 5
+  windowSeconds   Int?                // within this many seconds, e.g. 600
+
+  severity        Severity            @default(MEDIUM)
+  isActive        Boolean             @default(true)
+  organizationId  String
+  organization    Organization        @relation(fields: [organizationId], references: [id])
+  alerts          Alert[]
+  createdAt       DateTime            @default(now())
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+model Alert {
+  id         String      @id @default(uuid())
+  ruleId     String
+  rule       Rule        @relation(fields: [ruleId], references: [id])
+  serverId   String?     // nullable: event-based alerts (e.g. login attacks) may not tie to one server
+  server     Server?     @relation(fields: [serverId], references: [id])
+  details    Json        // what actually triggered this (the value, the matching events, etc.)
+  status     AlertStatus @default(OPEN)
+  incidentId String?
+  incident   Incident?   @relation(fields: [incidentId], references: [id])
+  createdAt  DateTime    @default(now())
+
+  @@index([status, createdAt])
+}
+
+enum IncidentStatus {
+  OPEN
+  INVESTIGATING
+  RESOLVED
+}
+
+model Incident {
+  id             String         @id @default(uuid())
+  title          String
+  severity       Severity
+  status         IncidentStatus @default(OPEN)
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  alerts         Alert[]
+  createdAt      DateTime       @default(now())
+  resolvedAt     DateTime?
 }
 
 model Metric {

@@ -6,12 +6,14 @@ import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { UnauthorizedException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { EventsService } from '../events/events.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private eventsService: EventsService,
   ) {}
 
   async signup(dto: SignupDto) {
@@ -51,25 +53,45 @@ export class AuthService {
     );
   }
 
-  async login(dto: LoginDto) {
+ async login(dto: LoginDto, ipAddress: string) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
+
     if (!user) {
+      await this.eventsService.record({
+        eventType: 'AUTH_LOGIN_FAILURE',
+        source: 'auth-service',
+        severity: 'WARNING',
+        message: `Failed login attempt for unknown email ${dto.email}`,
+        metadata: { email: dto.email, ipAddress, reason: 'unknown_email' },
+      });
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const passwordValid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!passwordValid) {
+      await this.eventsService.record({
+        eventType: 'AUTH_LOGIN_FAILURE',
+        source: 'auth-service',
+        severity: 'WARNING',
+        message: `Failed login attempt for ${dto.email}`,
+        metadata: { email: dto.email, ipAddress, reason: 'wrong_password' },
+        organizationId: user.organizationId,
+      });
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    return this.issueTokens(
-      user.id,
-      user.email,
-      user.role,
-      user.organizationId,
-    );
+    await this.eventsService.record({
+      eventType: 'AUTH_LOGIN_SUCCESS',
+      source: 'auth-service',
+      severity: 'INFO',
+      message: `Successful login for ${dto.email}`,
+      metadata: { email: dto.email, ipAddress },
+      organizationId: user.organizationId,
+    });
+
+    return this.issueTokens(user.id, user.email, user.role, user.organizationId);
   }
 
   private async issueTokens(
