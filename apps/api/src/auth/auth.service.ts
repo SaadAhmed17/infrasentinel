@@ -53,7 +53,7 @@ export class AuthService {
     );
   }
 
- async login(dto: LoginDto, ipAddress: string) {
+  async login(dto: LoginDto, ipAddress: string) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -91,7 +91,12 @@ export class AuthService {
       organizationId: user.organizationId,
     });
 
-    return this.issueTokens(user.id, user.email, user.role, user.organizationId);
+    return this.issueTokens(
+      user.id,
+      user.email,
+      user.role,
+      user.organizationId,
+    );
   }
 
   private async issueTokens(

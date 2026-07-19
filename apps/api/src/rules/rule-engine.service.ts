@@ -17,7 +17,9 @@ export class RuleEngineService {
 
     if (uncorrelatedAlerts.length === 0) return;
 
-    this.logger.debug(`Correlation check: ${uncorrelatedAlerts.length} uncorrelated open alert(s)`);
+    this.logger.debug(
+      `Correlation check: ${uncorrelatedAlerts.length} uncorrelated open alert(s)`,
+    );
 
     // Group alerts by organization (since rule.organizationId tells us which org each belongs to)
     const byOrg = new Map<string, typeof uncorrelatedAlerts>();
@@ -37,7 +39,9 @@ export class RuleEngineService {
       }
 
       for (const [, groupedAlerts] of bySerer.entries()) {
-        const highestSeverity = this.pickHighestSeverity(groupedAlerts.map((a) => a.rule.severity));
+        const highestSeverity = this.pickHighestSeverity(
+          groupedAlerts.map((a) => a.rule.severity),
+        );
 
         const incident = await this.prisma.incident.create({
           data: {
@@ -52,61 +56,63 @@ export class RuleEngineService {
           data: { incidentId: incident.id },
         });
 
-        this.logger.warn(`Incident created: ${incident.id} grouping ${groupedAlerts.length} alert(s)`);
+        this.logger.warn(
+          `Incident created: ${incident.id} grouping ${groupedAlerts.length} alert(s)`,
+        );
       }
     }
   }
 
   private pickHighestSeverity(
-  severities: string[],
-): 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' {
-  const order = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+    severities: string[],
+  ): 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' {
+    const order = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 
-  let highest = 'LOW';
+    let highest = 'LOW';
 
-  for (const s of severities) {
-    if (order.indexOf(s) > order.indexOf(highest)) {
-      highest = s;
+    for (const s of severities) {
+      if (order.indexOf(s) > order.indexOf(highest)) {
+        highest = s;
+      }
+    }
+
+    return highest as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  }
+
+  @Cron(CronExpression.EVERY_30_SECONDS)
+  async evaluateRules() {
+    this.logger.debug('Rule engine tick — checking active rules');
+
+    const activeMetricRules = await this.prisma.rule.findMany({
+      where: {
+        ruleType: 'METRIC_THRESHOLD',
+        isActive: true,
+      },
+    });
+
+    this.logger.debug(
+      `Found ${activeMetricRules.length} active metric rule(s)`,
+    );
+
+    for (const rule of activeMetricRules) {
+      await this.evaluateMetricRule(rule);
+    }
+
+    const activeEventRules = await this.prisma.rule.findMany({
+      where: {
+        ruleType: 'EVENT_FREQUENCY',
+        isActive: true,
+      },
+    });
+
+    this.logger.debug(
+      `Found ${activeEventRules.length} active event-frequency rule(s)`,
+    );
+
+    for (const rule of activeEventRules) {
+      await this.evaluateEventRule(rule);
     }
   }
-
-  return highest as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-}
-
-@Cron(CronExpression.EVERY_30_SECONDS)
-async evaluateRules() {
-  this.logger.debug('Rule engine tick — checking active rules');
-
-  const activeMetricRules = await this.prisma.rule.findMany({
-    where: {
-      ruleType: 'METRIC_THRESHOLD',
-      isActive: true,
-    },
-  });
-
-  this.logger.debug(
-    `Found ${activeMetricRules.length} active metric rule(s)`,
-  );
-
-  for (const rule of activeMetricRules) {
-    await this.evaluateMetricRule(rule);
-  }
-
-  const activeEventRules = await this.prisma.rule.findMany({
-    where: {
-      ruleType: 'EVENT_FREQUENCY',
-      isActive: true,
-    },
-  });
-
-  this.logger.debug(
-    `Found ${activeEventRules.length} active event-frequency rule(s)`,
-  );
-
-  for (const rule of activeEventRules) {
-    await this.evaluateEventRule(rule);
-  }
-}
 
   private async evaluateMetricRule(rule: {
     id: string;
@@ -123,7 +129,9 @@ async evaluateRules() {
       where: { organizationId: rule.organizationId },
     });
 
-    this.logger.debug(`Rule "${rule.id}": checking ${servers.length} server(s) in org ${rule.organizationId}`);
+    this.logger.debug(
+      `Rule "${rule.id}": checking ${servers.length} server(s) in org ${rule.organizationId}`,
+    );
 
     for (const server of servers) {
       const windowStart = new Date(Date.now() - rule.durationSeconds * 1000);
@@ -133,7 +141,9 @@ async evaluateRules() {
         orderBy: { timestamp: 'asc' },
       });
 
-      this.logger.debug(`Server "${server.name}": found ${recentMetrics.length} metric(s) in last ${rule.durationSeconds}s`);
+      this.logger.debug(
+        `Server "${server.name}": found ${recentMetrics.length} metric(s) in last ${rule.durationSeconds}s`,
+      );
 
       if (recentMetrics.length === 0) continue;
 
@@ -145,14 +155,20 @@ async evaluateRules() {
       const field = fieldMap[rule.metricField];
 
       const values = recentMetrics.map((m) => m[field] as number);
-      this.logger.debug(`Server "${server.name}": ${rule.metricField} values in window: [${values.join(', ')}]`);
+      this.logger.debug(
+        `Server "${server.name}": ${rule.metricField} values in window: [${values.join(', ')}]`,
+      );
 
       const allBreached = recentMetrics.every((m) => {
         const value = m[field] as number;
-        return rule.operator === 'GREATER_THAN' ? value > rule.threshold! : value < rule.threshold!;
+        return rule.operator === 'GREATER_THAN'
+          ? value > rule.threshold!
+          : value < rule.threshold!;
       });
 
-      this.logger.debug(`Server "${server.name}": all readings breach threshold (${rule.threshold})? ${allBreached}`);
+      this.logger.debug(
+        `Server "${server.name}": all readings breach threshold (${rule.threshold})? ${allBreached}`,
+      );
 
       if (!allBreached) continue;
 
@@ -160,22 +176,32 @@ async evaluateRules() {
         where: { ruleId: rule.id, serverId: server.id, status: 'OPEN' },
       });
       if (existingOpenAlert) {
-        this.logger.debug(`Server "${server.name}": alert already OPEN, skipping duplicate`);
+        this.logger.debug(
+          `Server "${server.name}": alert already OPEN, skipping duplicate`,
+        );
         continue;
       }
 
-      const latestValue = recentMetrics[recentMetrics.length - 1][field] as number;
+      const latestValue = recentMetrics[recentMetrics.length - 1][
+        field
+      ] as number;
 
       await this.prisma.alert.create({
         data: {
           ruleId: rule.id,
           serverId: server.id,
-          details: { value: latestValue, metricField: rule.metricField, threshold: rule.threshold },
+          details: {
+            value: latestValue,
+            metricField: rule.metricField,
+            threshold: rule.threshold,
+          },
           status: 'OPEN',
         },
       });
 
-      this.logger.warn(`Alert created: ${rule.metricField} rule "${rule.id}" breached on server ${server.name}`);
+      this.logger.warn(
+        `Alert created: ${rule.metricField} rule "${rule.id}" breached on server ${server.name}`,
+      );
     }
   }
 
@@ -188,7 +214,13 @@ async evaluateRules() {
     windowSeconds: number | null;
     severity: string;
   }) {
-    if (!rule.eventType || !rule.groupByField || !rule.maxCount || !rule.windowSeconds) return;
+    if (
+      !rule.eventType ||
+      !rule.groupByField ||
+      !rule.maxCount ||
+      !rule.windowSeconds
+    )
+      return;
 
     const windowStart = new Date(Date.now() - rule.windowSeconds * 1000);
 
@@ -210,7 +242,9 @@ async evaluateRules() {
       groups.get(groupValue)!.push(event);
     }
 
-    this.logger.debug(`Rule "${rule.id}": ${groups.size} distinct "${rule.groupByField}" group(s) found`);
+    this.logger.debug(
+      `Rule "${rule.id}": ${groups.size} distinct "${rule.groupByField}" group(s) found`,
+    );
 
     for (const [groupValue, events] of groups.entries()) {
       if (events.length < rule.maxCount) continue;
@@ -223,7 +257,9 @@ async evaluateRules() {
         },
       });
       if (existingOpenAlert) {
-        this.logger.debug(`Group "${groupValue}": alert already OPEN, skipping duplicate`);
+        this.logger.debug(
+          `Group "${groupValue}": alert already OPEN, skipping duplicate`,
+        );
         continue;
       }
 

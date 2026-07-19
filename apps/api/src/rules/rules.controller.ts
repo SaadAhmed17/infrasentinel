@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Patch, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Patch,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { RulesService } from './rules.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -15,7 +23,10 @@ export class RulesController {
   @Post()
   @UseGuards(RolesGuard)
   @Roles('OWNER', 'ADMIN', 'SECURITY_ANALYST')
-  createRule(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateRuleDto) {
+  createRule(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateRuleDto,
+  ) {
     return this.rulesService.createRule(user.organizationId, dto);
   }
 
@@ -27,7 +38,11 @@ export class RulesController {
   @Patch(':id/toggle')
   @UseGuards(RolesGuard)
   @Roles('OWNER', 'ADMIN', 'SECURITY_ANALYST')
-  toggleRule(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body('isActive') isActive: boolean) {
+  toggleRule(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body('isActive') isActive: boolean,
+  ) {
     return this.rulesService.toggleRule(user.organizationId, id, isActive);
   }
 }

@@ -1,5 +1,10 @@
 import { IsEnum, IsNumber, IsString, IsOptional, Min } from 'class-validator';
-import { RuleType, MetricField, ComparisonOperator, Severity } from '@prisma/client';
+import {
+  RuleType,
+  MetricField,
+  ComparisonOperator,
+  Severity,
+} from '@prisma/client';
 
 export class CreateRuleDto {
   @IsString()

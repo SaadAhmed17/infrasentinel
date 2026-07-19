@@ -9,7 +9,14 @@ import { EventsModule } from './events/events.module';
 import { RulesModule } from './rules/rules.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, OrganizationsModule, ServersModule, EventsModule, RulesModule],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    OrganizationsModule,
+    ServersModule,
+    EventsModule,
+    RulesModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })

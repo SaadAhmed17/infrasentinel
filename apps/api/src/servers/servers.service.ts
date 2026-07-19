@@ -67,8 +67,7 @@ export class ServersService {
     });
 
     return { server, metrics: metrics.reverse() };
-   }
-  
+  }
 
   async findByApiKey(apiKey: string) {
     const server = await this.prisma.server.findUnique({
