@@ -8,26 +8,105 @@ export class RuleEngineService {
 
   constructor(private prisma: PrismaService) {}
 
-  @Cron(CronExpression.EVERY_30_SECONDS)
-  async evaluateRules() {
-    this.logger.debug('Rule engine tick — checking active rules');
-
-    const activeMetricRules = await this.prisma.rule.findMany({
-      where: { ruleType: 'METRIC_THRESHOLD', isActive: true },
+  @Cron(CronExpression.EVERY_MINUTE)
+  async correlateAlertsIntoIncidents() {
+    const uncorrelatedAlerts = await this.prisma.alert.findMany({
+      where: { status: 'OPEN', incidentId: null },
+      include: { rule: true },
     });
-    this.logger.debug(`Found ${activeMetricRules.length} active metric rule(s)`);
-    for (const rule of activeMetricRules) {
-      await this.evaluateMetricRule(rule);
+
+    if (uncorrelatedAlerts.length === 0) return;
+
+    this.logger.debug(`Correlation check: ${uncorrelatedAlerts.length} uncorrelated open alert(s)`);
+
+    // Group alerts by organization (since rule.organizationId tells us which org each belongs to)
+    const byOrg = new Map<string, typeof uncorrelatedAlerts>();
+    for (const alert of uncorrelatedAlerts) {
+      const orgId = alert.rule.organizationId;
+      if (!byOrg.has(orgId)) byOrg.set(orgId, []);
+      byOrg.get(orgId)!.push(alert);
     }
 
-    const activeEventRules = await this.prisma.rule.findMany({
-      where: { ruleType: 'EVENT_FREQUENCY', isActive: true },
-    });
-    this.logger.debug(`Found ${activeEventRules.length} active event-frequency rule(s)`);
-    for (const rule of activeEventRules) {
-      await this.evaluateEventRule(rule);
+    for (const [organizationId, alerts] of byOrg.entries()) {
+      // Simple correlation: group alerts from the same server within a 5-minute window into one incident
+      const bySerer = new Map<string, typeof alerts>();
+      for (const alert of alerts) {
+        const key = alert.serverId ?? 'no-server'; // event-frequency alerts have no serverId
+        if (!bySerer.has(key)) bySerer.set(key, []);
+        bySerer.get(key)!.push(alert);
+      }
+
+      for (const [, groupedAlerts] of bySerer.entries()) {
+        const highestSeverity = this.pickHighestSeverity(groupedAlerts.map((a) => a.rule.severity));
+
+        const incident = await this.prisma.incident.create({
+          data: {
+            title: `Incident: ${groupedAlerts.length} related alert(s)`,
+            severity: highestSeverity,
+            organizationId,
+          },
+        });
+
+        await this.prisma.alert.updateMany({
+          where: { id: { in: groupedAlerts.map((a) => a.id) } },
+          data: { incidentId: incident.id },
+        });
+
+        this.logger.warn(`Incident created: ${incident.id} grouping ${groupedAlerts.length} alert(s)`);
+      }
     }
   }
+
+  private pickHighestSeverity(
+  severities: string[],
+): 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' {
+  const order = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+
+  let highest = 'LOW';
+
+  for (const s of severities) {
+    if (order.indexOf(s) > order.indexOf(highest)) {
+      highest = s;
+    }
+  }
+
+  return highest as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+}
+
+@Cron(CronExpression.EVERY_30_SECONDS)
+async evaluateRules() {
+  this.logger.debug('Rule engine tick — checking active rules');
+
+  const activeMetricRules = await this.prisma.rule.findMany({
+    where: {
+      ruleType: 'METRIC_THRESHOLD',
+      isActive: true,
+    },
+  });
+
+  this.logger.debug(
+    `Found ${activeMetricRules.length} active metric rule(s)`,
+  );
+
+  for (const rule of activeMetricRules) {
+    await this.evaluateMetricRule(rule);
+  }
+
+  const activeEventRules = await this.prisma.rule.findMany({
+    where: {
+      ruleType: 'EVENT_FREQUENCY',
+      isActive: true,
+    },
+  });
+
+  this.logger.debug(
+    `Found ${activeEventRules.length} active event-frequency rule(s)`,
+  );
+
+  for (const rule of activeEventRules) {
+    await this.evaluateEventRule(rule);
+  }
+}
 
   private async evaluateMetricRule(rule: {
     id: string;
