@@ -7,6 +7,7 @@ import { OrganizationsModule } from './organizations/organizations.module';
 import { ServersModule } from './servers/servers.module';
 import { EventsModule } from './events/events.module';
 import { RulesModule } from './rules/rules.module';
+import { IncidentsModule } from './incidents/incidents.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { RulesModule } from './rules/rules.module';
     ServersModule,
     EventsModule,
     RulesModule,
+    IncidentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
