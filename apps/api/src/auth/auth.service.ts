@@ -122,6 +122,26 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
+  async refreshTokens(refreshToken: string) {
+    let payload: { sub: string; email: string; role: string; organizationId: string };
+
+    try {
+      payload = await this.jwtService.verifyAsync(refreshToken, {
+        secret: process.env.JWT_REFRESH_SECRET,
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    // Confirm the user still exists and hasn't been deactivated/deleted since the token was issued
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+    if (!user) {
+      throw new UnauthorizedException('User no longer exists');
+    }
+
+    return this.issueTokens(user.id, user.email, user.role, user.organizationId);
+  }
+
   async acceptInvitation(dto: { token: string; password: string }) {
     const invitation = await this.prisma.invitation.findUnique({
       where: { token: dto.token },

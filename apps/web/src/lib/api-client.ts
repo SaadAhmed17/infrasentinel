@@ -6,10 +6,28 @@ interface ApiError {
   statusCode: number;
 }
 
-async function apiFetch<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<T> {
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = localStorage.getItem('refreshToken');
+  if (!refreshToken) return null;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    localStorage.setItem('accessToken', data.accessToken);
+    localStorage.setItem('refreshToken', data.refreshToken);
+    return data.accessToken;
+  } catch {
+    return null;
+  }
+}
+
+async function apiFetch<T>(path: string, options: RequestInit = {}, isRetry = false): Promise<T> {
   const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
 
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -20,6 +38,19 @@ async function apiFetch<T>(
       ...options.headers,
     },
   });
+
+  // If unauthorized and we haven't already retried, try refreshing once, then retry the original request
+  if (res.status === 401 && !isRetry) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      return apiFetch<T>(path, options, true);
+    }
+    // Refresh failed too — clear tokens and force a real re-login
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    window.location.href = '/login';
+    throw new Error('Session expired, please log in again');
+  }
 
   if (!res.ok) {
     const errorBody: ApiError = await res.json();
