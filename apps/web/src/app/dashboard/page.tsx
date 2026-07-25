@@ -39,6 +39,13 @@ function DashboardContent() {
         Servers
         </Link>
 
+        <Link href="/rules" className="text-sm text-blue-600 hover:underline">
+        Rules
+        </Link>
+      <Link href="/incidents" className="text-sm text-blue-600 hover:underline">
+      Incidents
+      </Link>
+
           <button onClick={logout} className="rounded-md border px-4 py-2 text-sm hover:bg-gray-100">
             Log out
           </button>
