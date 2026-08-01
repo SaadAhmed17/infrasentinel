@@ -30,20 +30,22 @@ Active development — Final Year Project (FYP), Air University Islamabad. Curre
 ## Features Implemented So Far
 
 - [x] Multi-tenant architecture (Organization → Users, discriminator-column pattern)
-- [x] Custom JWT auth (signup, login, RBAC via roles: Owner/Admin/Security Analyst/DevOps Engineer/Developer/Viewer)
+- [x] Custom JWT auth with refresh tokens (silent refresh on frontend), RBAC via roles
 - [x] Organization invitations (invite-link flow)
 - [x] Server registration with API-key-based agent authentication
-- [x] Real-time metrics ingestion (CPU, memory, disk)
-- [x] Live dashboard: server list with status/heartbeat, per-server metrics charts
+- [x] Real-time metrics ingestion (CPU, memory, disk) + live dashboard charts
+- [x] Generic event/log pipeline (Event model) — auth events (login success/failure) recorded
+- [x] SIEM rule engine: metric-threshold rules + event-frequency rules (e.g. brute-force login detection)
+- [x] Alert-to-incident correlation, Rules & Incidents management UI
 - [x] CI pipeline (lint + build on every PR)
 
 ## Not Yet Built (Roadmap)
 
 - [ ] LSTM-Autoencoder anomaly detection
-- [ ] SIEM rule correlation engine
 - [ ] RAG-based AI incident assistant
-- [ ] Incident/alert lifecycle management
 - [ ] Notifications (email)
+- [ ] Delete functionality for rules/servers
+- [ ] Dashboard overview (currently shows only org members — needs servers/alerts/incidents summary)
 
 ## Local Development
 

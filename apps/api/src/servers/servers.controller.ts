@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ServersService } from './servers.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -32,6 +40,10 @@ export class ServersController {
     @Param('id') serverId: string,
     @Query('limit') limit?: string,
   ) {
-    return this.serversService.getServerMetrics(user.organizationId, serverId, limit ? parseInt(limit) : 50);
+    return this.serversService.getServerMetrics(
+      user.organizationId,
+      serverId,
+      limit ? parseInt(limit) : 50,
+    );
   }
 }

@@ -3,8 +3,10 @@ import time
 import psutil
 import requests
 from dotenv import load_dotenv
+import sys
 
-load_dotenv()
+env_file = sys.argv[1] if len(sys.argv) > 1 else ".env"
+load_dotenv(dotenv_path=env_file)
 
 API_URL = os.getenv("API_URL", "http://localhost:3001")
 API_KEY = os.getenv("API_KEY")

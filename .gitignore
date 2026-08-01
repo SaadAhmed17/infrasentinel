@@ -11,3 +11,6 @@ __pycache__/
 *.log
 apps/ai-service/venv/
 apps/agent/venv/
+apps/agent/.env.server1
+apps/agent/.env.server2
+apps/agent/.env.server3
