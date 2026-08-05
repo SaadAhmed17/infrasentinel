@@ -20,7 +20,11 @@ export class IncidentsService {
     });
   }
 
-  async updateIncidentStatus(organizationId: string, incidentId: string, status: string) {
+  async updateIncidentStatus(
+    organizationId: string,
+    incidentId: string,
+    status: string,
+  ) {
     return this.prisma.incident.updateMany({
       where: { id: incidentId, organizationId },
       data: {

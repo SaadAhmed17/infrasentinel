@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Patch, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Patch,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { OrganizationsService } from './organizations.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -7,6 +15,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import type { AuthenticatedUser } from 'src/auth/types/authenticated-user.type';
+import { Role } from '@prisma/client';
 
 @Controller('organizations')
 @UseGuards(JwtAuthGuard)
@@ -39,7 +48,7 @@ export class OrganizationsController {
   updateMemberRole(
     @CurrentUser() user: AuthenticatedUser,
     @Param('userId') userId: string,
-    @Body('role') role: string,
+    @Body('role') role: Role,
   ) {
     return this.orgService.updateMemberRole(user.organizationId, userId, role);
   }

@@ -24,6 +24,10 @@ export class IncidentsController {
     @Param('id') id: string,
     @Body('status') status: string,
   ) {
-    return this.incidentsService.updateIncidentStatus(user.organizationId, id, status);
+    return this.incidentsService.updateIncidentStatus(
+      user.organizationId,
+      id,
+      status,
+    );
   }
 }
