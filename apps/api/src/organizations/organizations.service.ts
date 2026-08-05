@@ -6,6 +6,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
+import { Role } from '@prisma/client';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -34,15 +35,20 @@ export class OrganizationsService {
     });
   }
 
-  async updateMemberRole(organizationId: string, targetUserId: string, newRole: string) {
+  async updateMemberRole(
+    organizationId: string,
+    targetUserId: string,
+    newRole: Role,
+  ) {
     const targetUser = await this.prisma.user.findFirst({
       where: { id: targetUserId, organizationId },
     });
-    if (!targetUser) throw new NotFoundException('User not found in this organization');
+    if (!targetUser)
+      throw new NotFoundException('User not found in this organization');
 
     return this.prisma.user.update({
       where: { id: targetUserId },
-      data: { role: newRole as any },
+      data: { role: newRole },
       select: { id: true, email: true, role: true },
     });
   }

@@ -123,7 +123,12 @@ export class AuthService {
   }
 
   async refreshTokens(refreshToken: string) {
-    let payload: { sub: string; email: string; role: string; organizationId: string };
+    let payload: {
+      sub: string;
+      email: string;
+      role: string;
+      organizationId: string;
+    };
 
     try {
       payload = await this.jwtService.verifyAsync(refreshToken, {
@@ -134,12 +139,19 @@ export class AuthService {
     }
 
     // Confirm the user still exists and hasn't been deactivated/deleted since the token was issued
-    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+    });
     if (!user) {
       throw new UnauthorizedException('User no longer exists');
     }
 
-    return this.issueTokens(user.id, user.email, user.role, user.organizationId);
+    return this.issueTokens(
+      user.id,
+      user.email,
+      user.role,
+      user.organizationId,
+    );
   }
 
   async acceptInvitation(dto: { token: string; password: string }) {
