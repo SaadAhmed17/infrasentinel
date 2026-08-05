@@ -34,6 +34,19 @@ export class OrganizationsService {
     });
   }
 
+  async updateMemberRole(organizationId: string, targetUserId: string, newRole: string) {
+    const targetUser = await this.prisma.user.findFirst({
+      where: { id: targetUserId, organizationId },
+    });
+    if (!targetUser) throw new NotFoundException('User not found in this organization');
+
+    return this.prisma.user.update({
+      where: { id: targetUserId },
+      data: { role: newRole as any },
+      select: { id: true, email: true, role: true },
+    });
+  }
+
   async createInvitation(organizationId: string, dto: CreateInvitationDto) {
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
