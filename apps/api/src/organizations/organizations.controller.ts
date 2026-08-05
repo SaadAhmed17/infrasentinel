@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Param, Post, UseGuards } from '@nestjs/common';
 import { OrganizationsService } from './organizations.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -31,6 +31,17 @@ export class OrganizationsController {
     @Body() dto: UpdateOrganizationDto,
   ) {
     return this.orgService.updateOrganization(user.organizationId, dto);
+  }
+
+  @Patch('members/:userId/role')
+  @UseGuards(RolesGuard)
+  @Roles('OWNER', 'ADMIN')
+  updateMemberRole(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('userId') userId: string,
+    @Body('role') role: string,
+  ) {
+    return this.orgService.updateMemberRole(user.organizationId, userId, role);
   }
 
   @Post('invitations')
