@@ -112,6 +112,21 @@ export class RuleEngineService {
     for (const rule of activeEventRules) {
       await this.evaluateEventRule(rule);
     }
+
+    const activeHeartbeatRules = await this.prisma.rule.findMany({
+      where: {
+        ruleType: 'HEARTBEAT_MISSING',
+        isActive: true,
+      },
+    });
+
+    this.logger.debug(
+      `Found ${activeHeartbeatRules.length} active heartbeat rule(s)`,
+    );
+
+    for (const rule of activeHeartbeatRules) {
+      await this.evaluateHeartbeatRule(rule);
+    }
   }
 
   private async evaluateMetricRule(rule: {
@@ -201,6 +216,51 @@ export class RuleEngineService {
 
       this.logger.warn(
         `Alert created: ${rule.metricField} rule "${rule.id}" breached on server ${server.name}`,
+      );
+    }
+  }
+
+  private async evaluateHeartbeatRule(rule: {
+    id: string;
+    organizationId: string;
+    durationSeconds: number;
+    severity: string;
+  }) {
+    const servers = await this.prisma.server.findMany({
+      where: { organizationId: rule.organizationId },
+    });
+
+    const cutoff = new Date(Date.now() - rule.durationSeconds * 1000);
+
+    for (const server of servers) {
+      if (!server.lastHeartbeat) continue;
+
+      const isMissing = server.lastHeartbeat < cutoff;
+      if (!isMissing) continue;
+
+      const existingOpenAlert = await this.prisma.alert.findFirst({
+        where: { ruleId: rule.id, serverId: server.id, status: 'OPEN' },
+      });
+      if (existingOpenAlert) continue;
+
+      const secondsSinceLastHeartbeat = Math.floor(
+        (Date.now() - server.lastHeartbeat.getTime()) / 1000,
+      );
+
+      await this.prisma.alert.create({
+        data: {
+          ruleId: rule.id,
+          serverId: server.id,
+          details: {
+            lastHeartbeat: server.lastHeartbeat.toISOString(),
+            secondsSinceLastHeartbeat,
+          },
+          status: 'OPEN',
+        },
+      });
+
+      this.logger.warn(
+        `Alert created: server "${server.name}" heartbeat missing for ${secondsSinceLastHeartbeat}s (rule "${rule.id}")`,
       );
     }
   }
