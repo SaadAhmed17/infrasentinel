@@ -127,6 +127,20 @@ export class RuleEngineService {
     for (const rule of activeHeartbeatRules) {
       await this.evaluateHeartbeatRule(rule);
     }
+   const activeCredStuffingRules = await this.prisma.rule.findMany({
+      where: {
+        ruleType: 'CREDENTIAL_STUFFING',
+        isActive: true,
+      },
+    });
+
+    this.logger.debug(
+      `Found ${activeCredStuffingRules.length} active credential-stuffing rule(s)`,
+    );
+
+    for (const rule of activeCredStuffingRules) {
+      await this.evaluateCredentialStuffingRule(rule);
+    }
   }
 
   private async evaluateMetricRule(rule: {
@@ -261,6 +275,79 @@ export class RuleEngineService {
 
       this.logger.warn(
         `Alert created: server "${server.name}" heartbeat missing for ${secondsSinceLastHeartbeat}s (rule "${rule.id}")`,
+      );
+    }
+  }
+
+  private async evaluateCredentialStuffingRule(rule: {
+    id: string;
+    organizationId: string;
+    windowSeconds: number | null;
+    maxCount: number | null;
+    severity: string;
+  }) {
+    if (!rule.windowSeconds || !rule.maxCount) return;
+
+    const windowStart = new Date(Date.now() - rule.windowSeconds * 1000);
+
+    // Get every login attempt (success or failure) in the window, for this org
+    const recentAttempts = await this.prisma.event.findMany({
+      where: {
+        eventType: { in: ['AUTH_LOGIN_FAILURE', 'AUTH_LOGIN_SUCCESS'] },
+        createdAt: { gte: windowStart },
+        OR: [{ organizationId: rule.organizationId }, { organizationId: null }],
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // Group by email — we're looking for "one account, attacked from many IPs, then a success"
+    const byEmail = new Map<string, typeof recentAttempts>();
+    for (const event of recentAttempts) {
+      const metadata = event.metadata as Record<string, unknown>;
+      const email = metadata.email as string | undefined;
+      if (!email) continue;
+
+      if (!byEmail.has(email)) byEmail.set(email, []);
+      byEmail.get(email)!.push(event);
+    }
+
+    for (const [email, attempts] of byEmail.entries()) {
+      const failures = attempts.filter((a) => a.eventType === 'AUTH_LOGIN_FAILURE');
+      const lastAttempt = attempts[attempts.length - 1];
+      const endedInSuccess = lastAttempt.eventType === 'AUTH_LOGIN_SUCCESS';
+
+      if (!endedInSuccess) continue; // credential stuffing only matters if they eventually got in
+
+      const distinctIps = new Set(
+        failures.map((f) => (f.metadata as Record<string, unknown>).ipAddress as string),
+      );
+
+      if (distinctIps.size < rule.maxCount) continue;
+
+      const existingOpenAlert = await this.prisma.alert.findFirst({
+        where: {
+          ruleId: rule.id,
+          status: 'OPEN',
+          details: { path: ['email'], equals: email },
+        },
+      });
+      if (existingOpenAlert) continue;
+
+      await this.prisma.alert.create({
+        data: {
+          ruleId: rule.id,
+          details: {
+            email,
+            distinctIpCount: distinctIps.size,
+            ipAddresses: Array.from(distinctIps),
+            totalFailures: failures.length,
+          },
+          status: 'OPEN',
+        },
+      });
+
+      this.logger.warn(
+        `Alert created: possible credential stuffing on "${email}" — ${distinctIps.size} distinct IPs before success (rule "${rule.id}")`,
       );
     }
   }
