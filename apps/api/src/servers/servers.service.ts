@@ -24,10 +24,7 @@ export class ServersService {
   async ingestMetric(serverId: string, dto: IngestMetricDto) {
     await this.prisma.server.update({
       where: { id: serverId },
-      data: {
-        status: 'ONLINE',
-        lastHeartbeat: new Date(),
-      },
+      data: { status: 'ONLINE', lastHeartbeat: new Date() },
     });
 
     return this.prisma.metric.create({
@@ -36,6 +33,12 @@ export class ServersService {
         cpuUsage: dto.cpuUsage,
         memUsage: dto.memUsage,
         diskUsage: dto.diskUsage,
+        networkIn: dto.networkIn,
+        networkOut: dto.networkOut,
+        diskReadRate: dto.diskReadRate,
+        diskWriteRate: dto.diskWriteRate,
+        processCount: dto.processCount,
+        loadAverage: dto.loadAverage,
       },
     });
   }
