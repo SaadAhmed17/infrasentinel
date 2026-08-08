@@ -12,6 +12,12 @@ interface Metric {
   cpuUsage: number;
   memUsage: number;
   diskUsage: number;
+  networkIn: number | null;
+  networkOut: number | null;
+  diskReadRate: number | null;
+  diskWriteRate: number | null;
+  processCount: number | null;
+  loadAverage: number | null;
   timestamp: string;
 }
 
@@ -52,6 +58,12 @@ function ServerDetailContent() {
     CPU: m.cpuUsage,
     Memory: m.memUsage,
     Disk: m.diskUsage,
+    NetworkIn: m.networkIn,
+    NetworkOut: m.networkOut,
+    DiskRead: m.diskReadRate,
+    DiskWrite: m.diskWriteRate,
+    Processes: m.processCount,
+    LoadAvg: m.loadAverage,
   }));
 
   return (
@@ -67,21 +79,67 @@ function ServerDetailContent() {
             No metrics yet — make sure the agent is running and pushing to this server&apos;s API key.
           </div>
         ) : (
+          <div className="space-y-6">
+            <div className="rounded-lg border bg-white p-6 shadow-sm">
+              <h2 className="mb-4 text-lg font-medium">Resource Usage (%)</h2>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="time" tick={{ fontSize: 11 }} />
+                  <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="CPU" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="Memory" stroke="#f59e0b" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="Disk" stroke="#10b981" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           <div className="rounded-lg border bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-lg font-medium">Live Metrics (last {data.metrics.length} readings)</h2>
-            <ResponsiveContainer width="100%" height={350}>
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="time" tick={{ fontSize: 11 }} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="CPU" stroke="#3b82f6" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="Memory" stroke="#f59e0b" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="Disk" stroke="#10b981" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+              <h2 className="mb-4 text-lg font-medium">Network Throughput (bytes/sec)</h2>
+              <ResponsiveContainer width="100%" height={250}>
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="time" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="NetworkIn" stroke="#8b5cf6" strokeWidth={2} dot={false} connectNulls />
+                  <Line type="monotone" dataKey="NetworkOut" stroke="#ec4899" strokeWidth={2} dot={false} connectNulls />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="grid grid-cols-2 gap-6">
+              <div className="rounded-lg border bg-white p-6 shadow-sm">
+                <h2 className="mb-4 text-lg font-medium">Disk I/O (bytes/sec)</h2>
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="time" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="DiskRead" stroke="#06b6d4" strokeWidth={2} dot={false} connectNulls />
+                    <Line type="monotone" dataKey="DiskWrite" stroke="#f97316" strokeWidth={2} dot={false} connectNulls />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="rounded-lg border bg-white p-6 shadow-sm">
+                <h2 className="mb-4 text-lg font-medium">Processes &amp; Load</h2>
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="time" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="Processes" stroke="#6366f1" strokeWidth={2} dot={false} connectNulls />
+                    <Line type="monotone" dataKey="LoadAvg" stroke="#84cc16" strokeWidth={2} dot={false} connectNulls />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              </div>
+              </div>
         )}
       </div>
     </div>
