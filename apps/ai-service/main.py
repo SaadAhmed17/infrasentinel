@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+
 from inference import score_server
 
 app = FastAPI(title="InfraSentinel AI Service")
