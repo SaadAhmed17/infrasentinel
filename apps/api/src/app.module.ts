@@ -8,7 +8,7 @@ import { ServersModule } from './servers/servers.module';
 import { EventsModule } from './events/events.module';
 import { RulesModule } from './rules/rules.module';
 import { IncidentsModule } from './incidents/incidents.module';
-
+import { AnomalyModule } from './anomaly/anomaly.module';
 @Module({
   imports: [
     PrismaModule,
@@ -18,6 +18,7 @@ import { IncidentsModule } from './incidents/incidents.module';
     EventsModule,
     RulesModule,
     IncidentsModule,
+    AnomalyModule,
   ],
   controllers: [AppController],
   providers: [AppService],
