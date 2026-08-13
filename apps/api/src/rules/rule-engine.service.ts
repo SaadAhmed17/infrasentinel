@@ -127,7 +127,7 @@ export class RuleEngineService {
     for (const rule of activeHeartbeatRules) {
       await this.evaluateHeartbeatRule(rule);
     }
-   const activeCredStuffingRules = await this.prisma.rule.findMany({
+    const activeCredStuffingRules = await this.prisma.rule.findMany({
       where: {
         ruleType: 'CREDENTIAL_STUFFING',
         isActive: true,
@@ -312,14 +312,18 @@ export class RuleEngineService {
     }
 
     for (const [email, attempts] of byEmail.entries()) {
-      const failures = attempts.filter((a) => a.eventType === 'AUTH_LOGIN_FAILURE');
+      const failures = attempts.filter(
+        (a) => a.eventType === 'AUTH_LOGIN_FAILURE',
+      );
       const lastAttempt = attempts[attempts.length - 1];
       const endedInSuccess = lastAttempt.eventType === 'AUTH_LOGIN_SUCCESS';
 
       if (!endedInSuccess) continue; // credential stuffing only matters if they eventually got in
 
       const distinctIps = new Set(
-        failures.map((f) => (f.metadata as Record<string, unknown>).ipAddress as string),
+        failures.map(
+          (f) => (f.metadata as Record<string, unknown>).ipAddress as string,
+        ),
       );
 
       if (distinctIps.size < rule.maxCount) continue;
