@@ -4,17 +4,17 @@ export class IngestMetricDto {
   @IsNumber()
   @Min(0)
   @Max(100)
-  cpuUsage: number;
+  cpuUsage!: number;
 
   @IsNumber()
   @Min(0)
   @Max(100)
-  memUsage: number;
+  memUsage!: number;
 
   @IsNumber()
   @Min(0)
   @Max(100)
-  diskUsage: number;
+  diskUsage!: number;
 
   @IsOptional()
   @IsNumber()
