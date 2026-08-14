@@ -1,12 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
+import { AnomalyService } from 'src/anomaly/anomaly.service';
 
 @Injectable()
 export class RuleEngineService {
   private readonly logger = new Logger(RuleEngineService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private anomalyService: AnomalyService,
+  ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
   async correlateAlertsIntoIncidents() {
@@ -140,6 +144,20 @@ export class RuleEngineService {
 
     for (const rule of activeCredStuffingRules) {
       await this.evaluateCredentialStuffingRule(rule);
+    }
+    const activeAnomalyRules = await this.prisma.rule.findMany({
+      where: {
+        ruleType: 'ANOMALY_DETECTION',
+        isActive: true,
+      },
+    });
+
+    this.logger.debug(
+      `Found ${activeAnomalyRules.length} active anomaly-detection rule(s)`,
+    );
+
+    for (const rule of activeAnomalyRules) {
+      await this.evaluateAnomalyRule(rule);
     }
   }
 
@@ -352,6 +370,48 @@ export class RuleEngineService {
 
       this.logger.warn(
         `Alert created: possible credential stuffing on "${email}" — ${distinctIps.size} distinct IPs before success (rule "${rule.id}")`,
+      );
+    }
+  }
+  private async evaluateAnomalyRule(rule: {
+    id: string;
+    organizationId: string;
+    severity: string;
+  }) {
+    const servers = await this.prisma.server.findMany({
+      where: { organizationId: rule.organizationId },
+    });
+
+    for (const server of servers) {
+      const score = await this.anomalyService.getAnomalyScore(server.id);
+
+      if (!score || !score.isAnomaly) continue;
+
+      const existingOpenAlert = await this.prisma.alert.findFirst({
+        where: { ruleId: rule.id, serverId: server.id, status: 'OPEN' },
+      });
+      if (existingOpenAlert) {
+        this.logger.debug(
+          `Server "${server.name}": anomaly alert already OPEN, skipping duplicate`,
+        );
+        continue;
+      }
+
+      await this.prisma.alert.create({
+        data: {
+          ruleId: rule.id,
+          serverId: server.id,
+          details: {
+            reconstructionError: score.reconstructionError,
+            threshold: score.threshold,
+            detectionMethod: 'LSTM-Autoencoder',
+          },
+          status: 'OPEN',
+        },
+      });
+
+      this.logger.warn(
+        `Alert created: LSTM anomaly detected on server "${server.name}" (error: ${score.reconstructionError}, threshold: ${score.threshold})`,
       );
     }
   }

@@ -3,9 +3,9 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { RulesService } from './rules.service';
 import { RulesController } from './rules.controller';
 import { RuleEngineService } from './rule-engine.service';
-
+import { AnomalyModule } from '../anomaly/anomaly.module';
 @Module({
-  imports: [ScheduleModule.forRoot()],
+  imports: [ScheduleModule.forRoot(), AnomalyModule],
   controllers: [RulesController],
   providers: [RulesService, RuleEngineService],
 })
