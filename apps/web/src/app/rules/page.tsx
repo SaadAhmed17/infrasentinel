@@ -179,6 +179,7 @@ function RulesContent() {
                 <th className="pb-2">Condition</th>
                 <th className="pb-2">Severity</th>
                 <th className="pb-2">Active</th>
+                <th className="pb-2"></th>
               </tr>
             </thead>
             <tbody>
@@ -199,6 +200,23 @@ function RulesContent() {
                       {r.isActive ? 'Active' : 'Inactive'}
                     </button>
                   </td>
+                  <td className="py-2">
+  <button
+    onClick={async () => {
+      if (
+        confirm(
+          `Delete rule "${r.name}"? This also removes its alert history.`,
+        )
+      ) {
+        await apiClient.delete(`/rules/${r.id}`);
+        loadRules();
+      }
+    }}
+    className="text-xs text-red-600 hover:underline"
+  >
+    Delete
+  </button>
+</td>
                 </tr>
               ))}
               {rules.length === 0 && (

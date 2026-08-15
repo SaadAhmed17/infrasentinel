@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateRuleDto } from './dto/create-rule.dto';
 
@@ -21,5 +21,34 @@ export class RulesService {
       where: { id: ruleId, organizationId },
       data: { isActive },
     });
+  }
+  async deleteRule(organizationId: string, ruleId: string) {
+    const rule = await this.prisma.rule.findFirst({
+      where: {
+        id: ruleId,
+        organizationId,
+      },
+    });
+
+    if (!rule) {
+      throw new NotFoundException('Rule not found');
+    }
+
+    await this.prisma.alert.deleteMany({
+      where: {
+        ruleId,
+      },
+    });
+
+    await this.prisma.rule.delete({
+      where: {
+        id: ruleId,
+      },
+    });
+
+    return {
+      deleted: true,
+      ruleId,
+    };
   }
 }
