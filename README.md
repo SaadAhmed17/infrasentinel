@@ -31,21 +31,34 @@ Active development — Final Year Project (FYP), Air University Islamabad. Curre
 
 - [x] Multi-tenant architecture (Organization → Users, discriminator-column pattern)
 - [x] Custom JWT auth with refresh tokens (silent refresh on frontend), RBAC via roles
-- [x] Organization invitations (invite-link flow)
+- [x] Organization invitations (invite-link flow, full UI for inviting/promoting members)
 - [x] Server registration with API-key-based agent authentication
-- [x] Real-time metrics ingestion (CPU, memory, disk) + live dashboard charts
-- [x] Generic event/log pipeline (Event model) — auth events (login success/failure) recorded
-- [x] SIEM rule engine: metric-threshold rules + event-frequency rules (e.g. brute-force login detection)
+- [x] Real-time metrics ingestion — 9 features: CPU, memory, disk usage, network I/O, disk I/O rate, process count, load average
+- [x] Live dashboard: server list, per-server multi-panel metrics charts (Recharts)
+- [x] Generic event/log pipeline (Event model) — auth events with IP tracking
+- [x] SIEM rule engine — 4 rule types: metric-threshold, event-frequency, heartbeat-missing, credential-stuffing
 - [x] Alert-to-incident correlation, Rules & Incidents management UI
-- [x] CI pipeline (lint + build on every PR)
+- [x] LSTM-Autoencoder anomaly detection — per-server trained models, real-time inference, auto-alerting integrated into the SIEM pipeline
+- [x] CI pipeline (lint + build on every PR, required to pass before merge)
 
 ## Not Yet Built (Roadmap)
 
-- [ ] LSTM-Autoencoder anomaly detection
 - [ ] RAG-based AI incident assistant
 - [ ] Notifications (email)
 - [ ] Delete functionality for rules/servers
-- [ ] Dashboard overview (currently shows only org members — needs servers/alerts/incidents summary)
+- [ ] Dashboard overview page (servers/alerts/incidents summary at a glance)
+- [ ] SIEM Tier 2/3 rules (SSH brute-force, unauthorized root access, API abuse, ransomware disk-write detection)
+- [ ] Automated tests (unit/e2e) — flagged honestly below
+
+## AI / Anomaly Detection Architecture
+
+`apps/ai-service` trains a separate LSTM-Autoencoder per monitored server (not one shared model), since each server has a different normal baseline. Pipeline:
+
+1. `data_pipeline.py` — pulls raw metrics per server from Neon
+2. `preprocess.py` — drops nulls, log-transforms skewed features (network/disk I/O), normalizes via per-server MinMaxScaler, builds sliding-window sequences (20 timesteps)
+3. `train.py` — trains with early stopping, saves best-validation-loss checkpoint, derives an anomaly threshold from the 95th percentile of validation reconstruction error
+4. `inference.py` — real-time scoring endpoint, exposed via FastAPI
+5. NestJS (`AnomalyModule`) proxies scores and, on a 30-second schedule, auto-creates `Alert`/`Incident` records when anomalies are detected — unified with SIEM rule-based alerts in the same pipeline
 
 ## Local Development
 
