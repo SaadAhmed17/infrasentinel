@@ -198,6 +198,12 @@ export class RuleEngineService {
         CPU_USAGE: 'cpuUsage',
         MEM_USAGE: 'memUsage',
         DISK_USAGE: 'diskUsage',
+        NETWORK_IN: 'networkIn',
+        NETWORK_OUT: 'networkOut',
+        DISK_READ_RATE: 'diskReadRate',
+        DISK_WRITE_RATE: 'diskWriteRate',
+        PROCESS_COUNT: 'processCount',
+        LOAD_AVERAGE: 'loadAverage',
       };
       const field = fieldMap[rule.metricField];
 
@@ -205,6 +211,14 @@ export class RuleEngineService {
       this.logger.debug(
         `Server "${server.name}": ${rule.metricField} values in window: [${values.join(', ')}]`,
       );
+
+      const hasNulls = recentMetrics.some((m) => m[field] === null);
+      if (hasNulls) {
+        this.logger.debug(
+          `Server "${server.name}": skipping — window contains null values for ${rule.metricField}`,
+        );
+        continue;
+      }
 
       const allBreached = recentMetrics.every((m) => {
         const value = m[field] as number;

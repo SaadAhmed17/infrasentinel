@@ -70,6 +70,12 @@ enum MetricField {
   CPU_USAGE
   MEM_USAGE
   DISK_USAGE
+  NETWORK_IN
+  NETWORK_OUT
+  DISK_READ_RATE
+  DISK_WRITE_RATE
+  PROCESS_COUNT
+  LOAD_AVERAGE
 }
 
 enum ComparisonOperator {

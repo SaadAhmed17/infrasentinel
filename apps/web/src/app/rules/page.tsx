@@ -8,10 +8,11 @@ import { apiClient } from '@/lib/api-client';
 interface Rule {
   id: string;
   name: string;
-  ruleType: 'METRIC_THRESHOLD' | 'EVENT_FREQUENCY';
+  ruleType: string;
   metricField: string | null;
   operator: string | null;
   threshold: number | null;
+  durationSeconds: number;
   eventType: string | null;
   groupByField: string | null;
   maxCount: number | null;
@@ -19,6 +20,26 @@ interface Rule {
   severity: string;
   isActive: boolean;
 }
+
+const RULE_TYPES = [
+  { value: 'METRIC_THRESHOLD', label: 'Metric Threshold (e.g. high CPU)' },
+  { value: 'EVENT_FREQUENCY', label: 'Event Frequency (e.g. brute-force login)' },
+  { value: 'HEARTBEAT_MISSING', label: 'Heartbeat Missing (e.g. service crash)' },
+  { value: 'CREDENTIAL_STUFFING', label: 'Credential Stuffing (multi-IP failures then success)' },
+  { value: 'ANOMALY_DETECTION', label: 'AI Anomaly Detection (LSTM-Autoencoder)' },
+];
+
+const METRIC_FIELDS = [
+  { value: 'CPU_USAGE', label: 'CPU Usage (%)' },
+  { value: 'MEM_USAGE', label: 'Memory Usage (%)' },
+  { value: 'DISK_USAGE', label: 'Disk Usage (%)' },
+  { value: 'NETWORK_IN', label: 'Network In (bytes/sec)' },
+  { value: 'NETWORK_OUT', label: 'Network Out (bytes/sec)' },
+  { value: 'DISK_READ_RATE', label: 'Disk Read Rate (bytes/sec)' },
+  { value: 'DISK_WRITE_RATE', label: 'Disk Write Rate (bytes/sec)' },
+  { value: 'PROCESS_COUNT', label: 'Process Count' },
+  { value: 'LOAD_AVERAGE', label: 'Load Average' },
+];
 
 function severityColor(s: string) {
   switch (s) {
@@ -29,11 +50,28 @@ function severityColor(s: string) {
   }
 }
 
+function describeCondition(r: Rule) {
+  switch (r.ruleType) {
+    case 'METRIC_THRESHOLD':
+      return `${r.metricField} ${r.operator === 'GREATER_THAN' ? '>' : '<'} ${r.threshold}, sustained ${r.durationSeconds}s`;
+    case 'EVENT_FREQUENCY':
+      return `${r.maxCount}+ ${r.eventType} per ${r.groupByField} in ${r.windowSeconds}s`;
+    case 'HEARTBEAT_MISSING':
+      return `No heartbeat for ${r.durationSeconds}s`;
+    case 'CREDENTIAL_STUFFING':
+      return `${r.maxCount}+ distinct IPs failing then succeeding, within ${r.windowSeconds}s`;
+    case 'ANOMALY_DETECTION':
+      return 'LSTM reconstruction error exceeds per-server threshold';
+    default:
+      return '—';
+  }
+}
+
 function RulesContent() {
   const [rules, setRules] = useState<Rule[]>([]);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
-  const [ruleType, setRuleType] = useState<'METRIC_THRESHOLD' | 'EVENT_FREQUENCY'>('METRIC_THRESHOLD');
+  const [ruleType, setRuleType] = useState('METRIC_THRESHOLD');
   const [name, setName] = useState('');
   const [metricField, setMetricField] = useState('CPU_USAGE');
   const [operator, setOperator] = useState('GREATER_THAN');
@@ -59,10 +97,19 @@ function RulesContent() {
     setSaving(true);
     setError('');
     try {
-      const payload =
-        ruleType === 'METRIC_THRESHOLD'
-          ? { name, ruleType, metricField, operator, threshold: Number(threshold), durationSeconds: Number(durationSeconds), severity }
-          : { name, ruleType, eventType, groupByField, maxCount: Number(maxCount), windowSeconds: Number(windowSeconds), severity };
+      let payload: Record<string, unknown> = { name, ruleType, severity };
+
+      if (ruleType === 'METRIC_THRESHOLD') {
+        payload = { ...payload, metricField, operator, threshold: Number(threshold), durationSeconds: Number(durationSeconds) };
+      } else if (ruleType === 'EVENT_FREQUENCY') {
+        payload = { ...payload, eventType, groupByField, maxCount: Number(maxCount), windowSeconds: Number(windowSeconds) };
+      } else if (ruleType === 'HEARTBEAT_MISSING') {
+        payload = { ...payload, durationSeconds: Number(durationSeconds) };
+      } else if (ruleType === 'CREDENTIAL_STUFFING') {
+        payload = { ...payload, windowSeconds: Number(windowSeconds), maxCount: Number(maxCount) };
+      }
+      // ANOMALY_DETECTION needs nothing beyond name + severity
+
       await apiClient.post('/rules', payload);
       setName('');
       setShowForm(false);
@@ -79,9 +126,16 @@ function RulesContent() {
     loadRules();
   }
 
+  async function handleDelete(rule: Rule) {
+    if (confirm(`Delete rule "${rule.name}"? This also removes its alert history.`)) {
+      await apiClient.delete(`/rules/${rule.id}`);
+      loadRules();
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-8">
-      <div className="mx-auto max-w-3xl">
+      <div className="mx-auto max-w-4xl">
         <div className="mb-6 flex items-center justify-between">
           <div>
             <Link href="/dashboard" className="text-sm text-blue-600 hover:underline">← Dashboard</Link>
@@ -100,20 +154,21 @@ function RulesContent() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">Rule type</label>
-              <select value={ruleType} onChange={(e) => setRuleType(e.target.value as 'METRIC_THRESHOLD' | 'EVENT_FREQUENCY')} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
-                <option value="METRIC_THRESHOLD">Metric threshold (e.g. high CPU)</option>
-                <option value="EVENT_FREQUENCY">Event frequency (e.g. brute-force login)</option>
+              <select value={ruleType} onChange={(e) => setRuleType(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
+                {RULE_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
               </select>
             </div>
 
-            {ruleType === 'METRIC_THRESHOLD' ? (
+            {ruleType === 'METRIC_THRESHOLD' && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Metric</label>
                   <select value={metricField} onChange={(e) => setMetricField(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
-                    <option value="CPU_USAGE">CPU usage</option>
-                    <option value="MEM_USAGE">Memory usage</option>
-                    <option value="DISK_USAGE">Disk usage</option>
+                    {METRIC_FIELDS.map((m) => (
+                      <option key={m.value} value={m.value}>{m.label}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -124,7 +179,7 @@ function RulesContent() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Threshold (%)</label>
+                  <label className="block text-sm font-medium text-gray-700">Threshold</label>
                   <input type="number" value={threshold} onChange={(e) => setThreshold(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
                 </div>
                 <div>
@@ -132,7 +187,9 @@ function RulesContent() {
                   <input type="number" value={durationSeconds} onChange={(e) => setDurationSeconds(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
                 </div>
               </div>
-            ) : (
+            )}
+
+            {ruleType === 'EVENT_FREQUENCY' && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Event type</label>
@@ -151,6 +208,32 @@ function RulesContent() {
                   <input type="number" value={windowSeconds} onChange={(e) => setWindowSeconds(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
                 </div>
               </div>
+            )}
+
+            {ruleType === 'HEARTBEAT_MISSING' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Missing for at least (seconds)</label>
+                <input type="number" value={durationSeconds} onChange={(e) => setDurationSeconds(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
+              </div>
+            )}
+
+            {ruleType === 'CREDENTIAL_STUFFING' && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Min distinct IPs</label>
+                  <input type="number" value={maxCount} onChange={(e) => setMaxCount(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Window (seconds)</label>
+                  <input type="number" value={windowSeconds} onChange={(e) => setWindowSeconds(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
+                </div>
+              </div>
+            )}
+
+            {ruleType === 'ANOMALY_DETECTION' && (
+              <p className="rounded-md bg-blue-50 p-3 text-xs text-blue-700">
+                No extra configuration needed — this rule checks every server against its own trained LSTM-Autoencoder model on each evaluation cycle.
+              </p>
             )}
 
             <div>
@@ -186,12 +269,8 @@ function RulesContent() {
               {rules.map((r) => (
                 <tr key={r.id} className="border-b last:border-0">
                   <td className="py-2">{r.name}</td>
-                  <td className="py-2 text-gray-600">{r.ruleType === 'METRIC_THRESHOLD' ? 'Metric' : 'Event'}</td>
-                  <td className="py-2 text-gray-600">
-                    {r.ruleType === 'METRIC_THRESHOLD'
-                      ? `${r.metricField} ${r.operator === 'GREATER_THAN' ? '>' : '<'} ${r.threshold}%`
-                      : `${r.maxCount}+ ${r.eventType} per ${r.groupByField} in ${r.windowSeconds}s`}
-                  </td>
+                  <td className="py-2 text-gray-600">{RULE_TYPES.find((t) => t.value === r.ruleType)?.label.split(' (')[0] ?? r.ruleType}</td>
+                  <td className="py-2 text-gray-600">{describeCondition(r)}</td>
                   <td className="py-2">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${severityColor(r.severity)}`}>{r.severity}</span>
                   </td>
@@ -201,26 +280,12 @@ function RulesContent() {
                     </button>
                   </td>
                   <td className="py-2">
-  <button
-    onClick={async () => {
-      if (
-        confirm(
-          `Delete rule "${r.name}"? This also removes its alert history.`,
-        )
-      ) {
-        await apiClient.delete(`/rules/${r.id}`);
-        loadRules();
-      }
-    }}
-    className="text-xs text-red-600 hover:underline"
-  >
-    Delete
-  </button>
-</td>
+                    <button onClick={() => handleDelete(r)} className="text-xs text-red-600 hover:underline">Delete</button>
+                  </td>
                 </tr>
               ))}
               {rules.length === 0 && (
-                <tr><td colSpan={5} className="py-4 text-center text-gray-400">No rules yet.</td></tr>
+                <tr><td colSpan={6} className="py-4 text-center text-gray-400">No rules yet.</td></tr>
               )}
             </tbody>
           </table>
