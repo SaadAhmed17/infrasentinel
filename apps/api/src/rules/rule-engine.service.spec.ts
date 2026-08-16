@@ -6,7 +6,14 @@ import { beforeEach, describe, it } from 'node:test';
 
 describe('RuleEngineService', () => {
   let service: RuleEngineService;
-  let prisma: any;
+  let prisma: {
+    rule: { findMany: jest.Mock };
+    server: { findMany: jest.Mock };
+    alert: { findFirst: jest.Mock; create: jest.Mock };
+    metric: { findMany: jest.Mock };
+    event: { findMany: jest.Mock };
+    incident: { create: jest.Mock };
+  };
 
   beforeEach(async () => {
     prisma = {
