@@ -16,6 +16,11 @@ export class IncidentsController {
     return this.incidentsService.listIncidents(user.organizationId);
   }
 
+  @Get('dashboard-summary')
+  getDashboardSummary(@CurrentUser() user: AuthenticatedUser) {
+    return this.incidentsService.getDashboardSummary(user.organizationId);
+  }
+
   @Patch(':id/status')
   @UseGuards(RolesGuard)
   @Roles('OWNER', 'ADMIN', 'SECURITY_ANALYST')

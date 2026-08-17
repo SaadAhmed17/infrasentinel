@@ -20,6 +20,42 @@ export class IncidentsService {
     });
   }
 
+  async getDashboardSummary(organizationId: string) {
+    const [servers, openIncidents, recentAlerts, activeRules] =
+      await Promise.all([
+        this.prisma.server.findMany({
+          where: { organizationId },
+          select: { id: true, name: true, status: true, lastHeartbeat: true },
+        }),
+        this.prisma.incident.count({
+          where: { organizationId, status: { in: ['OPEN', 'INVESTIGATING'] } },
+        }),
+        this.prisma.alert.findMany({
+          where: { rule: { organizationId } },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+          include: {
+            rule: { select: { name: true, severity: true } },
+            server: { select: { name: true } },
+          },
+        }),
+        this.prisma.rule.count({ where: { organizationId, isActive: true } }),
+      ]);
+
+    const onlineCount = servers.filter((s) => s.status === 'ONLINE').length;
+
+    return {
+      servers: {
+        total: servers.length,
+        online: onlineCount,
+        offline: servers.length - onlineCount,
+      },
+      openIncidents,
+      activeRules,
+      recentAlerts,
+    };
+  }
+
   async updateIncidentStatus(
     organizationId: string,
     incidentId: string,
