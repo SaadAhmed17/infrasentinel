@@ -53,7 +53,7 @@ export class ServersService {
     organizationId: string,
     dto: IngestLogEventDto,
   ) {
-    return this.eventsService.record({
+    return await this.eventsService.record({
       eventType: dto.eventType,
       source: 'ssh-log-agent',
       severity: dto.outcome === 'FAILURE' ? 'WARNING' : 'INFO',

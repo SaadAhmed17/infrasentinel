@@ -87,12 +87,18 @@ function RulesContent() {
   function loadRules() {
     apiClient.get<Rule[]>('/rules').then(setRules).catch((err) => setError(err.message));
   }
+  const PRESETS = [
+  { label: 'SSH Brute-Force', ruleType: 'EVENT_FREQUENCY', eventType: 'SSH_LOGIN_FAILURE', groupByField: 'ipAddress', maxCount: '5', windowSeconds: '60', severity: 'CRITICAL' },
+  { label: 'Web Login Brute-Force', ruleType: 'EVENT_FREQUENCY', eventType: 'AUTH_LOGIN_FAILURE', groupByField: 'ipAddress', maxCount: '10', windowSeconds: '300', severity: 'HIGH' },
+  { label: 'High CPU', ruleType: 'METRIC_THRESHOLD', metricField: 'CPU_USAGE', operator: 'GREATER_THAN', threshold: '85', durationSeconds: '60', severity: 'HIGH' },
+  { label: 'Service Crash', ruleType: 'HEARTBEAT_MISSING', durationSeconds: '30', severity: 'CRITICAL' },
+];
 
   useEffect(() => {
     loadRules();
   }, []);
 
-  async function handleCreate(e: React.FormEvent) {
+    async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     setError('');
@@ -108,14 +114,16 @@ function RulesContent() {
       } else if (ruleType === 'CREDENTIAL_STUFFING') {
         payload = { ...payload, windowSeconds: Number(windowSeconds), maxCount: Number(maxCount) };
       }
-      // ANOMALY_DETECTION needs nothing beyond name + severity
 
-      await apiClient.post('/rules', payload);
-      setName('');
-      setShowForm(false);
+      if (editingRuleId) {
+        await apiClient.patch(`/rules/${editingRuleId}`, payload);
+      } else {
+        await apiClient.post('/rules', payload);
+      }
+      resetForm();
       loadRules();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create rule');
+      setError(err instanceof Error ? err.message : 'Failed to save rule');
     } finally {
       setSaving(false);
     }
@@ -133,6 +141,30 @@ function RulesContent() {
     }
   }
 
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+
+  function startEdit(r: Rule) {
+    setEditingRuleId(r.id);
+    setName(r.name);
+    setRuleType(r.ruleType);
+    setMetricField(r.metricField ?? 'CPU_USAGE');
+    setOperator(r.operator ?? 'GREATER_THAN');
+    setThreshold(String(r.threshold ?? '80'));
+    setDurationSeconds(String(r.durationSeconds ?? '60'));
+    setEventType(r.eventType ?? 'AUTH_LOGIN_FAILURE');
+    setGroupByField(r.groupByField ?? 'ipAddress');
+    setMaxCount(String(r.maxCount ?? '5'));
+    setWindowSeconds(String(r.windowSeconds ?? '600'));
+    setSeverity(r.severity);
+    setShowForm(true);
+  }
+
+  function resetForm() {
+    setEditingRuleId(null);
+    setName('');
+    setShowForm(false);
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="mx-auto max-w-4xl">
@@ -141,9 +173,34 @@ function RulesContent() {
             <Link href="/dashboard" className="text-sm text-blue-600 hover:underline">← Dashboard</Link>
             <h1 className="mt-1 text-xl font-semibold">Rules</h1>
           </div>
-          <button onClick={() => setShowForm(!showForm)} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+          <button onClick={() => { if (editingRuleId) resetForm(); else setShowForm(!showForm)}} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
             + New Rule
           </button>
+          <div className="mb-2 flex flex-wrap gap-2">
+  <span className="text-xs text-gray-500 self-center">Quick presets:</span>
+  {PRESETS.map((p) => (
+    <button
+      key={p.label}
+      type="button"
+      onClick={() => {
+        setName(p.label);
+        setRuleType(p.ruleType);
+        if (p.metricField) setMetricField(p.metricField);
+        if (p.operator) setOperator(p.operator);
+        if (p.threshold) setThreshold(p.threshold);
+        if (p.durationSeconds) setDurationSeconds(p.durationSeconds);
+        if (p.eventType) setEventType(p.eventType);
+        if (p.groupByField) setGroupByField(p.groupByField);
+        if (p.maxCount) setMaxCount(p.maxCount);
+        if (p.windowSeconds) setWindowSeconds(p.windowSeconds);
+        setSeverity(p.severity);
+      }}
+      className="rounded-full border border-blue-300 bg-blue-50 px-3 py-1 text-xs text-blue-700 hover:bg-blue-100"
+    >
+      {p.label}
+    </button>
+  ))}
+</div>
         </div>
 
         {showForm && (
@@ -248,7 +305,7 @@ function RulesContent() {
 
             {error && <p className="text-sm text-red-600">{error}</p>}
             <button type="submit" disabled={saving} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
-              {saving ? 'Creating...' : 'Create rule'}
+              {saving ? 'Saving...' : editingRuleId ? 'Update rule' : 'Create rule'}
             </button>
           </form>
         )}
@@ -280,6 +337,7 @@ function RulesContent() {
                     </button>
                   </td>
                   <td className="py-2">
+                    <button onClick={() => startEdit(r)} className="text-xs text-blue-600 hover:underline">Edit</button>
                     <button onClick={() => handleDelete(r)} className="text-xs text-red-600 hover:underline">Delete</button>
                   </td>
                 </tr>

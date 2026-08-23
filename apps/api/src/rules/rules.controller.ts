@@ -28,6 +28,17 @@ export class RulesController {
     return this.rulesService.deleteRule(user.organizationId, id);
   }
 
+  @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles('OWNER', 'ADMIN', 'SECURITY_ANALYST')
+  updateRule(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: Partial<CreateRuleDto>,
+  ) {
+    return this.rulesService.updateRule(user.organizationId, id, dto);
+  }
+
   @Post()
   @UseGuards(RolesGuard)
   @Roles('OWNER', 'ADMIN', 'SECURITY_ANALYST')

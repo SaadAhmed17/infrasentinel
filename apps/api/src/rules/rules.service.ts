@@ -51,4 +51,19 @@ export class RulesService {
       ruleId,
     };
   }
+  async updateRule(
+    organizationId: string,
+    ruleId: string,
+    dto: Partial<CreateRuleDto>,
+  ) {
+    const rule = await this.prisma.rule.findFirst({
+      where: { id: ruleId, organizationId },
+    });
+    if (!rule) throw new NotFoundException('Rule not found');
+
+    return this.prisma.rule.update({
+      where: { id: ruleId },
+      data: dto,
+    });
+  }
 }
