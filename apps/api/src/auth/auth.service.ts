@@ -109,13 +109,13 @@ export class AuthService {
 
     const accessToken = await this.jwtService.signAsync(payload, {
       secret: process.env.JWT_ACCESS_SECRET,
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- expiresIn requires a template-literal-typed string (e.g. "15m") that `process.env` values can't satisfy at compile time; runtime value is validated via .env.example.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any -- expiresIn requires a template-literal-typed string (e.g. "15m") that `process.env` values can't satisfy at compile time; runtime value is validated via .env.example.
       expiresIn: process.env.JWT_ACCESS_EXPIRY as any,
     });
 
     const refreshToken = await this.jwtService.signAsync(payload, {
       secret: process.env.JWT_REFRESH_SECRET,
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- same as above, for the refresh token expiry.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any -- same as above, for the refresh token expiry.
       expiresIn: process.env.JWT_REFRESH_EXPIRY as any,
     });
 

@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   UseGuards,
+  Delete,
 } from '@nestjs/common';
 import { RulesService } from './rules.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -19,6 +20,24 @@ import { CreateRuleDto } from './dto/create-rule.dto';
 @UseGuards(JwtAuthGuard)
 export class RulesController {
   constructor(private rulesService: RulesService) {}
+
+  @Delete(':id')
+  @UseGuards(RolesGuard)
+  @Roles('OWNER', 'ADMIN', 'SECURITY_ANALYST')
+  deleteRule(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.rulesService.deleteRule(user.organizationId, id);
+  }
+
+  @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles('OWNER', 'ADMIN', 'SECURITY_ANALYST')
+  updateRule(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: Partial<CreateRuleDto>,
+  ) {
+    return this.rulesService.updateRule(user.organizationId, id, dto);
+  }
 
   @Post()
   @UseGuards(RolesGuard)

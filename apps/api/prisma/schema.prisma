@@ -61,12 +61,21 @@ model Event {
 enum RuleType {
   METRIC_THRESHOLD
   EVENT_FREQUENCY
+  HEARTBEAT_MISSING
+  CREDENTIAL_STUFFING
+  ANOMALY_DETECTION
 }
 
 enum MetricField {
   CPU_USAGE
   MEM_USAGE
   DISK_USAGE
+  NETWORK_IN
+  NETWORK_OUT
+  DISK_READ_RATE
+  DISK_WRITE_RATE
+  PROCESS_COUNT
+  LOAD_AVERAGE
 }
 
 enum ComparisonOperator {
@@ -146,13 +155,19 @@ model Incident {
 }
 
 model Metric {
-  id        String   @id @default(uuid())
-  serverId  String
-  server    Server   @relation(fields: [serverId], references: [id])
-  cpuUsage  Float
-  memUsage  Float
-  diskUsage Float
-  timestamp DateTime @default(now())
+  id            String   @id @default(uuid())
+  serverId      String
+  server        Server   @relation(fields: [serverId], references: [id])
+  cpuUsage      Float
+  memUsage      Float
+  diskUsage     Float
+  networkIn     Float?
+  networkOut    Float?
+  diskReadRate  Float?
+  diskWriteRate Float?
+  processCount  Int?
+  loadAverage   Float?
+  timestamp     DateTime @default(now())
 
   @@index([serverId, timestamp])
 }

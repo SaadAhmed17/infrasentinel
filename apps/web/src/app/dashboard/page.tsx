@@ -12,6 +12,18 @@ interface Member {
   role: string;
   createdAt: string;
 }
+interface DashboardSummary {
+  servers: { total: number; online: number; offline: number };
+  openIncidents: number;
+  activeRules: number;
+  recentAlerts: {
+    id: string;
+    status: string;
+    createdAt: string;
+    rule: { name: string; severity: string };
+    server: { name: string } | null;
+  }[];
+}
 
 const ROLES = ['OWNER', 'ADMIN', 'SECURITY_ANALYST', 'DEVOPS_ENGINEER', 'DEVELOPER', 'VIEWER'];
 
@@ -65,6 +77,12 @@ function DashboardContent() {
 
   const canManageMembers = user?.role === 'OWNER' || user?.role === 'ADMIN';
 
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+
+  useEffect(() => {
+    apiClient.get<DashboardSummary>('/incidents/dashboard-summary').then(setSummary).catch(() => setSummary(null));
+  }, []);
+
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="mx-auto max-w-3xl">
@@ -92,6 +110,61 @@ function DashboardContent() {
             <button onClick={() => setInviteLink(null)} className="mt-2 text-xs text-yellow-700 underline">
               Dismiss
             </button>
+          </div>
+        )}
+
+        {summary && (
+          <div className="mb-6 grid grid-cols-4 gap-4">
+            <div className="rounded-lg border bg-white p-4 shadow-sm">
+              <p className="text-xs text-gray-500">Servers Online</p>
+              <p className="mt-1 text-2xl font-semibold">
+                {summary.servers.online}
+                <span className="text-sm font-normal text-gray-400"> / {summary.servers.total}</span>
+              </p>
+            </div>
+            <div className="rounded-lg border bg-white p-4 shadow-sm">
+              <p className="text-xs text-gray-500">Open Incidents</p>
+              <p className={`mt-1 text-2xl font-semibold ${summary.openIncidents > 0 ? 'text-red-600' : ''}`}>
+                {summary.openIncidents}
+              </p>
+            </div>
+            <div className="rounded-lg border bg-white p-4 shadow-sm">
+              <p className="text-xs text-gray-500">Active Rules</p>
+              <p className="mt-1 text-2xl font-semibold">{summary.activeRules}</p>
+            </div>
+            <div className="rounded-lg border bg-white p-4 shadow-sm">
+              <p className="text-xs text-gray-500">Servers Offline</p>
+              <p className={`mt-1 text-2xl font-semibold ${summary.servers.offline > 0 ? 'text-orange-600' : ''}`}>
+                {summary.servers.offline}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {summary && summary.recentAlerts.length > 0 && (
+          <div className="mb-6 rounded-lg border bg-white p-6 shadow-sm">
+            <h2 className="mb-3 text-lg font-medium">Recent Alerts</h2>
+            <ul className="space-y-2">
+              {summary.recentAlerts.map((a) => (
+                <li key={a.id} className="flex items-center justify-between border-b pb-2 text-sm last:border-0">
+                  <div>
+                    <span className="font-medium">{a.rule.name}</span>
+                    {a.server && <span className="text-gray-500"> · {a.server.name}</span>}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <span className={`rounded-full px-2 py-0.5 font-medium ${
+                      a.rule.severity === 'CRITICAL' || a.rule.severity === 'HIGH' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {a.rule.severity}
+                    </span>
+                    {new Date(a.createdAt).toLocaleTimeString()}
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <Link href="/incidents" className="mt-3 inline-block text-sm text-blue-600 hover:underline">
+              View all incidents →
+            </Link>
           </div>
         )}
 

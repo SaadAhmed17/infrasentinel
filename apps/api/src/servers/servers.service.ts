@@ -3,10 +3,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateServerDto } from './dto/create-server.dto';
 import { IngestMetricDto } from './dto/ingest-metric.dto';
 import * as crypto from 'crypto';
+import { IngestLogEventDto } from './dto/ingest-log-event.dto';
+import { EventsService } from '../events/events.service';
 
 @Injectable()
 export class ServersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private eventsService: EventsService,
+  ) {}
 
   async createServer(organizationId: string, dto: CreateServerDto) {
     const apiKey = `isk_${crypto.randomBytes(24).toString('hex')}`;
@@ -24,10 +29,7 @@ export class ServersService {
   async ingestMetric(serverId: string, dto: IngestMetricDto) {
     await this.prisma.server.update({
       where: { id: serverId },
-      data: {
-        status: 'ONLINE',
-        lastHeartbeat: new Date(),
-      },
+      data: { status: 'ONLINE', lastHeartbeat: new Date() },
     });
 
     return this.prisma.metric.create({
@@ -36,7 +38,28 @@ export class ServersService {
         cpuUsage: dto.cpuUsage,
         memUsage: dto.memUsage,
         diskUsage: dto.diskUsage,
+        networkIn: dto.networkIn,
+        networkOut: dto.networkOut,
+        diskReadRate: dto.diskReadRate,
+        diskWriteRate: dto.diskWriteRate,
+        processCount: dto.processCount,
+        loadAverage: dto.loadAverage,
       },
+    });
+  }
+
+  async ingestLogEvent(
+    serverId: string,
+    organizationId: string,
+    dto: IngestLogEventDto,
+  ) {
+    return await this.eventsService.record({
+      eventType: dto.eventType,
+      source: 'ssh-log-agent',
+      severity: dto.outcome === 'FAILURE' ? 'WARNING' : 'INFO',
+      message: `SSH ${dto.outcome} for user "${dto.username}" from ${dto.ipAddress}`,
+      metadata: { username: dto.username, ipAddress: dto.ipAddress, serverId },
+      organizationId,
     });
   }
 
