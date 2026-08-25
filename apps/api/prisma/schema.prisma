@@ -1,10 +1,12 @@
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  extensions = [vector]
 }
 
 model Organization {
@@ -152,6 +154,7 @@ model Incident {
   alerts         Alert[]
   createdAt      DateTime       @default(now())
   resolvedAt     DateTime?
+  embedding IncidentEmbedding?
 }
 
 model Metric {
@@ -207,4 +210,16 @@ model User {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   createdAt      DateTime     @default(now())
+}
+
+model IncidentEmbedding {
+  id             String   @id @default(uuid())
+  incidentId     String   @unique
+  incident       Incident @relation(fields: [incidentId], references: [id])
+  organizationId String
+  content        String
+  embedding      Unsupported("vector(384)")
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId])
 }
