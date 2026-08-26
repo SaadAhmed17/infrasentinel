@@ -15,7 +15,16 @@ GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
 # Loaded once at import time — reused across every request rather than reloading per-call
 _embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
-_groq_client = Groq(api_key=GROQ_API_KEY)
+_groq_client = None
+
+
+def get_groq_client():
+    """Create the Groq client on first real use, not at import time — so importing
+    this module never requires a live API key (e.g. for CI syntax checks)."""
+    global _groq_client
+    if _groq_client is None:
+        _groq_client = Groq(api_key=GROQ_API_KEY)
+    return _groq_client
 
 
 def get_connection():
@@ -155,7 +164,7 @@ def query_incidents(organization_id: str, question: str, top_k: int = 5) -> dict
     )
     user_prompt = f"Incident data:\n\n{context_text}\n\nQuestion: {question}"
 
-    completion = _groq_client.chat.completions.create(
+    completion = get_groq_client().chat.completions.create(
         model=GROQ_MODEL,
         messages=[
             {"role": "system", "content": system_prompt},
