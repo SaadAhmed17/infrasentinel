@@ -46,10 +46,15 @@ export class RuleEngineService {
         const highestSeverity = this.pickHighestSeverity(
           groupedAlerts.map((a) => a.rule.severity),
         );
+        const primaryRuleName = groupedAlerts[0].rule.name;
+        const title =
+          groupedAlerts.length === 1
+            ? primaryRuleName
+            : `${primaryRuleName} + ${groupedAlerts.length - 1} more alert(s)`;
 
         const incident = await this.prisma.incident.create({
           data: {
-            title: `Incident: ${groupedAlerts.length} related alert(s)`,
+            title,
             severity: highestSeverity,
             organizationId,
           },
