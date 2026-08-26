@@ -1,9 +1,10 @@
-import os
 import json
+import os
+
 import psycopg2
-from sentence_transformers import SentenceTransformer
-from groq import Groq
 from dotenv import load_dotenv
+from groq import Groq
+from sentence_transformers import SentenceTransformer
 
 load_dotenv(dotenv_path=os.path.join(
     os.path.dirname(os.path.abspath(__file__)), ".env"))

@@ -1,9 +1,8 @@
 from fastapi import FastAPI
+from pydantic import BaseModel
 
 from inference import score_server
-
-from pydantic import BaseModel
-from rag import reindex_organization, query_incidents
+from rag import query_incidents, reindex_organization
 
 app = FastAPI(title="InfraSentinel AI Service")
 
@@ -25,16 +24,6 @@ class RagQueryRequest(BaseModel):
 
 class RagReindexRequest(BaseModel):
     organizationId: str
-
-
-@app.get("/health")
-def health_check():
-    return {"status": "ok", "service": "ai-service"}
-
-
-@app.get("/anomaly-score/{server_id}")
-def anomaly_score(server_id: str):
-    return score_server(server_id)
 
 
 @app.post("/rag/reindex")

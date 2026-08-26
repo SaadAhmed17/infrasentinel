@@ -1,5 +1,5 @@
 import { Body, Controller, Post, UseGuards } from '@nestjs/common';
-import { RagService, RagQueryResponse, RagReindexResponse} from './rag.service';
+import { RagService } from './rag.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/types/authenticated-user.type';
