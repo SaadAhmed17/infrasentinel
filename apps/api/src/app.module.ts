@@ -9,6 +9,8 @@ import { EventsModule } from './events/events.module';
 import { RulesModule } from './rules/rules.module';
 import { IncidentsModule } from './incidents/incidents.module';
 import { AnomalyModule } from './anomaly/anomaly.module';
+import { RagModule } from './rag/rag.module';
+
 @Module({
   imports: [
     PrismaModule,
@@ -19,6 +21,7 @@ import { AnomalyModule } from './anomaly/anomaly.module';
     RulesModule,
     IncidentsModule,
     AnomalyModule,
+    RagModule,
   ],
   controllers: [AppController],
   providers: [AppService],
