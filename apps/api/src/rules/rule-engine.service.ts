@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { AnomalyService } from '../anomaly/anomaly.service';
+import { RagService } from '../rag/rag.service';
 
 @Injectable()
 export class RuleEngineService {
@@ -10,6 +11,7 @@ export class RuleEngineService {
   constructor(
     private prisma: PrismaService,
     private anomalyService: AnomalyService,
+    private readonly ragService: RagService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -59,6 +61,7 @@ export class RuleEngineService {
             organizationId,
           },
         });
+        void this.ragService.indexIncident(incident.id, organizationId);
 
         await this.prisma.alert.updateMany({
           where: { id: { in: groupedAlerts.map((a) => a.id) } },

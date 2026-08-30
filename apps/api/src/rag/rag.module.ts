@@ -5,5 +5,6 @@ import { RagController } from './rag.controller';
 @Module({
   providers: [RagService],
   controllers: [RagController],
+  exports: [RagService],
 })
 export class RagModule {}
