@@ -5,6 +5,7 @@ import psycopg2
 from dotenv import load_dotenv
 from groq import Groq
 from sentence_transformers import SentenceTransformer
+from datetime import datetime
 
 load_dotenv(dotenv_path=os.path.join(
     os.path.dirname(os.path.abspath(__file__)), ".env"))
@@ -119,18 +120,13 @@ def reindex_organization(organization_id: str) -> dict:
 
 
 def query_incidents(organization_id: str, question: str, top_k: int = 5) -> dict:
-    """
-    Embed the question, find the top_k most similar incidents FOR THIS ORG ONLY,
-    then ask Groq to answer using only that retrieved context.
-    """
+
     question_vector = embed_text(question)
 
     conn = get_connection()
     cur = conn.cursor()
 
-    # <=> is pgvector's cosine-distance operator — lower distance means more similar.
-    # The organizationId filter runs in the SAME query as the similarity search,
-    # so a different org's incidents are never even considered, not just filtered out after.
+    # Semantic matches — most relevant to the question's meaning
     cur.execute(
         """
         SELECT ie."incidentId", ie.content, i.title, i.severity, i.status,
@@ -143,21 +139,38 @@ def query_incidents(organization_id: str, question: str, top_k: int = 5) -> dict
         """,
         (question_vector, organization_id, top_k),
     )
-    rows = cur.fetchall()
+    semantic_rows = cur.fetchall()
+    # ALSO always include the most recent incidents — covers "today"/"recent"/"latest"
+    # style questions that pure semantic similarity can't reliably catch.
+    cur.execute(
+        """
+        SELECT ie."incidentId", ie.content, i.title, i.severity, i.status, 0.5 AS distance
+        FROM "IncidentEmbedding" ie
+        JOIN "Incident" i ON ie."incidentId" = i.id
+        WHERE ie."organizationId" = %s
+        ORDER BY i."createdAt" DESC
+        LIMIT 3
+        """,
+        (organization_id,),
+    )
+    recent_rows = cur.fetchall()
+
     cur.close()
     conn.close()
 
-    if not rows:
-        return {
-            "answer": "No incidents have been indexed yet for this organization, so I don't have any data to answer from.",
-            "sources": [],
-        }
+    # Merge and de-duplicate by incidentId, semantic matches first
+    seen_ids = set()
+    rows = []
+    for row in semantic_rows + recent_rows:
+        if row[0] not in seen_ids:
+            seen_ids.add(row[0])
+            rows.append(row)
 
-    context_blocks = [row[1] for row in rows]
-    context_text = "\n\n---\n\n".join(context_blocks)
+    current_time = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
 
     system_prompt = (
-        "You are an incident analysis assistant for InfraSentinel, a server monitoring platform. "
+        f"You are an incident analysis assistant for InfraSentinel, a server monitoring platform. "
+        f"The current date and time is {current_time}. "
         "Answer the user's question using ONLY the incident data provided below. "
         "If the provided incidents don't contain enough information to answer, say so honestly "
         "rather than guessing or using outside knowledge."
