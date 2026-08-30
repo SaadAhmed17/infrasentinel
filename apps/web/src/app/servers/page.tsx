@@ -40,6 +40,8 @@ function ServersContent() {
   const [newServerName, setNewServerName] = useState('');
   const [creating, setCreating] = useState(false);
   const [newApiKey, setNewApiKey] = useState<string | null>(null);
+  const [editingServerId, setEditingServerId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
 
   function loadServers() {
     apiClient
@@ -50,7 +52,7 @@ function ServersContent() {
 
   useEffect(() => {
     loadServers();
-    const interval = setInterval(loadServers, 10000); // refresh every 10s to reflect live heartbeats
+    const interval = setInterval(loadServers, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -67,6 +69,19 @@ function ServersContent() {
       setError(err instanceof Error ? err.message : 'Failed to create server');
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleRename(id: string) {
+    await apiClient.patch(`/servers/${id}`, { name: editName });
+    setEditingServerId(null);
+    loadServers();
+  }
+
+  async function handleDeleteServer(id: string, name: string) {
+    if (confirm(`Delete server "${name}"? This permanently removes its metrics and alert history.`)) {
+      await apiClient.delete(`/servers/${id}`);
+      loadServers();
     }
   }
 
@@ -134,27 +149,56 @@ function ServersContent() {
                 <th className="pb-2">Name</th>
                 <th className="pb-2">Status</th>
                 <th className="pb-2">Last Heartbeat</th>
+                <th className="pb-2"></th>
               </tr>
             </thead>
             <tbody>
               {servers.map((s) => (
                 <tr key={s.id} className="border-b last:border-0">
                   <td className="py-2">
-  <Link href={`/servers/${s.id}`} className="text-blue-600 hover:underline">
-    {s.name}
-  </Link>
-</td>
+                    {editingServerId === s.id ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="rounded-md border border-gray-300 px-2 py-1 text-sm"
+                        />
+                        <button onClick={() => handleRename(s.id)} className="text-xs text-blue-600 hover:underline">Save</button>
+                        <button onClick={() => setEditingServerId(null)} className="text-xs text-gray-500 hover:underline">Cancel</button>
+                      </div>
+                    ) : (
+                      <Link href={`/servers/${s.id}`} className="text-blue-600 hover:underline">
+                        {s.name}
+                      </Link>
+                    )}
+                  </td>
                   <td className="py-2">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColor(s.status)}`}>
                       {s.status}
                     </span>
                   </td>
                   <td className="py-2 text-gray-600">{timeSince(s.lastHeartbeat)}</td>
+                  <td className="py-2">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => { setEditingServerId(s.id); setEditName(s.name); }}
+                        className="rounded-md border border-blue-200 px-2 py-1 text-xs text-blue-600 hover:bg-blue-50"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteServer(s.id, s.name)}
+                        className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
               {servers.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="py-4 text-center text-gray-400">
+                  <td colSpan={4} className="py-4 text-center text-gray-400">
                     No servers yet — add one above.
                   </td>
                 </tr>

@@ -103,4 +103,29 @@ export class ServersService {
 
     return server;
   }
+  async updateServer(organizationId: string, serverId: string, name: string) {
+    const server = await this.prisma.server.findFirst({
+      where: { id: serverId, organizationId },
+    });
+    if (!server) throw new NotFoundException('Server not found');
+
+    return this.prisma.server.update({
+      where: { id: serverId },
+      data: { name },
+    });
+  }
+
+  async deleteServer(organizationId: string, serverId: string) {
+    const server = await this.prisma.server.findFirst({
+      where: { id: serverId, organizationId },
+    });
+    if (!server) throw new NotFoundException('Server not found');
+
+    // Clean up everything that references this server before deleting it
+    await this.prisma.metric.deleteMany({ where: { serverId } });
+    await this.prisma.alert.deleteMany({ where: { serverId } });
+    await this.prisma.server.delete({ where: { id: serverId } });
+
+    return { deleted: true, serverId };
+  }
 }
