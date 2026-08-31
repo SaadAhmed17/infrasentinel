@@ -1,11 +1,11 @@
 import json
 import os
+from datetime import datetime, timezone
 
 import psycopg2
 from dotenv import load_dotenv
 from groq import Groq
 from sentence_transformers import SentenceTransformer
-from datetime import datetime
 
 load_dotenv(dotenv_path=os.path.join(
     os.path.dirname(os.path.abspath(__file__)), ".env"))
@@ -171,7 +171,7 @@ def query_incidents(organization_id: str, question: str, top_k: int = 5) -> dict
     context_blocks = [row[1] for row in rows]
     context_text = "\n\n---\n\n".join(context_blocks)
 
-    current_time = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     system_prompt = (
         f"You are an incident analysis assistant for InfraSentinel, a server monitoring platform. "
