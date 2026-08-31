@@ -120,13 +120,11 @@ def reindex_organization(organization_id: str) -> dict:
 
 
 def query_incidents(organization_id: str, question: str, top_k: int = 5) -> dict:
-
     question_vector = embed_text(question)
 
     conn = get_connection()
     cur = conn.cursor()
 
-    # Semantic matches — most relevant to the question's meaning
     cur.execute(
         """
         SELECT ie."incidentId", ie.content, i.title, i.severity, i.status,
@@ -140,8 +138,7 @@ def query_incidents(organization_id: str, question: str, top_k: int = 5) -> dict
         (question_vector, organization_id, top_k),
     )
     semantic_rows = cur.fetchall()
-    # ALSO always include the most recent incidents — covers "today"/"recent"/"latest"
-    # style questions that pure semantic similarity can't reliably catch.
+
     cur.execute(
         """
         SELECT ie."incidentId", ie.content, i.title, i.severity, i.status, 0.5 AS distance
@@ -158,13 +155,21 @@ def query_incidents(organization_id: str, question: str, top_k: int = 5) -> dict
     cur.close()
     conn.close()
 
-    # Merge and de-duplicate by incidentId, semantic matches first
     seen_ids = set()
     rows = []
     for row in semantic_rows + recent_rows:
         if row[0] not in seen_ids:
             seen_ids.add(row[0])
             rows.append(row)
+
+    if not rows:
+        return {
+            "answer": "No incidents have been indexed yet for this organization, so I don't have any data to answer from.",
+            "sources": [],
+        }
+
+    context_blocks = [row[1] for row in rows]
+    context_text = "\n\n---\n\n".join(context_blocks)
 
     current_time = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
 
