@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { ProtectedRoute } from '@/components/protected-route';
+import { AppShell } from '@/components/app-shell';
 import { apiClient } from '@/lib/api-client';
+import { Badge } from '@/components/ui/badge';
+import { Plus, Pencil, Trash2, Info, ListChecks } from 'lucide-react';
 
 interface Rule {
   id: string;
@@ -41,14 +43,12 @@ const METRIC_FIELDS = [
   { value: 'LOAD_AVERAGE', label: 'Load Average' },
 ];
 
-function severityColor(s: string) {
-  switch (s) {
-    case 'CRITICAL': return 'bg-red-100 text-red-700';
-    case 'HIGH': return 'bg-orange-100 text-orange-700';
-    case 'MEDIUM': return 'bg-yellow-100 text-yellow-700';
-    default: return 'bg-gray-100 text-gray-600';
-  }
-}
+const SEVERITY_STYLES: Record<string, string> = {
+  CRITICAL: 'border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-400',
+  HIGH: 'border-orange-500/20 bg-orange-500/10 text-orange-600 dark:text-orange-400',
+  MEDIUM: 'border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  LOW: 'border-border bg-muted text-muted-foreground',
+};
 
 function describeCondition(r: Rule) {
   switch (r.ruleType) {
@@ -67,6 +67,10 @@ function describeCondition(r: Rule) {
   }
 }
 
+const inputClass =
+  'mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-[14px] text-foreground outline-none focus:border-[oklch(0.62_0.19_265)] focus:ring-2 focus:ring-[oklch(0.62_0.19_265)]/20';
+const labelClass = 'block text-[12.5px] font-bold text-muted-foreground';
+
 function RulesContent() {
   const [rules, setRules] = useState<Rule[]>([]);
   const [error, setError] = useState('');
@@ -83,22 +87,24 @@ function RulesContent() {
   const [windowSeconds, setWindowSeconds] = useState('600');
   const [severity, setSeverity] = useState('MEDIUM');
   const [saving, setSaving] = useState(false);
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
 
   function loadRules() {
     apiClient.get<Rule[]>('/rules').then(setRules).catch((err) => setError(err.message));
   }
+
   const PRESETS = [
-  { label: 'SSH Brute-Force', ruleType: 'EVENT_FREQUENCY', eventType: 'SSH_LOGIN_FAILURE', groupByField: 'ipAddress', maxCount: '5', windowSeconds: '60', severity: 'CRITICAL' },
-  { label: 'Web Login Brute-Force', ruleType: 'EVENT_FREQUENCY', eventType: 'AUTH_LOGIN_FAILURE', groupByField: 'ipAddress', maxCount: '10', windowSeconds: '300', severity: 'HIGH' },
-  { label: 'High CPU', ruleType: 'METRIC_THRESHOLD', metricField: 'CPU_USAGE', operator: 'GREATER_THAN', threshold: '85', durationSeconds: '60', severity: 'HIGH' },
-  { label: 'Service Crash', ruleType: 'HEARTBEAT_MISSING', durationSeconds: '30', severity: 'CRITICAL' },
-];
+    { label: 'SSH Brute-Force', ruleType: 'EVENT_FREQUENCY', eventType: 'SSH_LOGIN_FAILURE', groupByField: 'ipAddress', maxCount: '5', windowSeconds: '60', severity: 'CRITICAL' },
+    { label: 'Web Login Brute-Force', ruleType: 'EVENT_FREQUENCY', eventType: 'AUTH_LOGIN_FAILURE', groupByField: 'ipAddress', maxCount: '10', windowSeconds: '300', severity: 'HIGH' },
+    { label: 'High CPU', ruleType: 'METRIC_THRESHOLD', metricField: 'CPU_USAGE', operator: 'GREATER_THAN', threshold: '85', durationSeconds: '60', severity: 'HIGH' },
+    { label: 'Service Crash', ruleType: 'HEARTBEAT_MISSING', durationSeconds: '30', severity: 'CRITICAL' },
+  ];
 
   useEffect(() => {
     loadRules();
   }, []);
 
-    async function handleCreate(e: React.FormEvent) {
+  async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     setError('');
@@ -141,8 +147,6 @@ function RulesContent() {
     }
   }
 
-  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
-
   function startEdit(r: Rule) {
     setEditingRuleId(r.id);
     setName(r.name);
@@ -165,198 +169,256 @@ function RulesContent() {
     setShowForm(false);
   }
 
+  const activeCount = rules.filter((r) => r.isActive).length;
+
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="mx-auto max-w-4xl">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <Link href="/dashboard" className="text-sm text-blue-600 hover:underline">← Dashboard</Link>
-            <h1 className="mt-1 text-xl font-semibold">Rules</h1>
-          </div>
-          <button onClick={() => { if (editingRuleId) resetForm(); else setShowForm(!showForm)}} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
-            + New Rule
+    <div>
+      <div className="mb-4 flex items-center justify-between">
+        <p className="text-[14.5px] font-semibold text-muted-foreground">
+          {rules.length === 0 ? 'No rules configured yet' : `${activeCount} of ${rules.length} rules active`}
+        </p>
+        <button
+          onClick={() => (editingRuleId ? resetForm() : setShowForm(!showForm))}
+          className="flex h-9.5 items-center gap-1.5 rounded-lg bg-[oklch(0.62_0.19_265)] px-3.5 text-[14px] font-bold text-white hover:bg-[oklch(0.66_0.19_265)]"
+        >
+          <Plus className="size-4" strokeWidth={2.25} />
+          New Rule
+        </button>
+      </div>
+
+      <div className="mb-5 flex flex-wrap items-center gap-2">
+        <span className="text-[12.5px] font-bold text-muted-foreground">Quick presets:</span>
+        {PRESETS.map((p) => (
+          <button
+            key={p.label}
+            type="button"
+            onClick={() => {
+              setName(p.label);
+              setRuleType(p.ruleType);
+              if (p.metricField) setMetricField(p.metricField);
+              if (p.operator) setOperator(p.operator);
+              if (p.threshold) setThreshold(p.threshold);
+              if (p.durationSeconds) setDurationSeconds(p.durationSeconds);
+              if (p.eventType) setEventType(p.eventType);
+              if (p.groupByField) setGroupByField(p.groupByField);
+              if (p.maxCount) setMaxCount(p.maxCount);
+              if (p.windowSeconds) setWindowSeconds(p.windowSeconds);
+              setSeverity(p.severity);
+              setShowForm(true);
+            }}
+            className="rounded-full border border-[oklch(0.62_0.19_265)]/25 bg-[oklch(0.62_0.19_265)]/10 px-3 py-1 text-[12.5px] font-semibold text-[oklch(0.55_0.19_265)] hover:bg-[oklch(0.62_0.19_265)]/20 dark:text-[oklch(0.72_0.15_265)]"
+          >
+            {p.label}
           </button>
-          <div className="mb-2 flex flex-wrap gap-2">
-  <span className="text-xs text-gray-500 self-center">Quick presets:</span>
-  {PRESETS.map((p) => (
-    <button
-      key={p.label}
-      type="button"
-      onClick={() => {
-        setName(p.label);
-        setRuleType(p.ruleType);
-        if (p.metricField) setMetricField(p.metricField);
-        if (p.operator) setOperator(p.operator);
-        if (p.threshold) setThreshold(p.threshold);
-        if (p.durationSeconds) setDurationSeconds(p.durationSeconds);
-        if (p.eventType) setEventType(p.eventType);
-        if (p.groupByField) setGroupByField(p.groupByField);
-        if (p.maxCount) setMaxCount(p.maxCount);
-        if (p.windowSeconds) setWindowSeconds(p.windowSeconds);
-        setSeverity(p.severity);
-      }}
-      className="rounded-full border border-blue-300 bg-blue-50 px-3 py-1 text-xs text-blue-700 hover:bg-blue-100"
-    >
-      {p.label}
-    </button>
-  ))}
-</div>
+        ))}
+      </div>
+
+      {error && (
+        <div className="mb-5 rounded-lg border border-red-500/20 bg-red-500/10 px-3.5 py-2.5 text-[14px] font-medium text-red-600 dark:text-red-400">
+          {error}
         </div>
+      )}
 
-        {showForm && (
-          <form onSubmit={handleCreate} className="mb-6 space-y-3 rounded-lg border bg-white p-4 shadow-sm">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Rule name</label>
-              <input value={name} onChange={(e) => setName(e.target.value)} required className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Rule type</label>
-              <select value={ruleType} onChange={(e) => setRuleType(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
-                {RULE_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
-                ))}
-              </select>
-            </div>
+      {showForm && (
+        <form onSubmit={handleCreate} className="mb-5 space-y-4 rounded-xl border border-border bg-card p-5 shadow-sm">
+          <div>
+            <label className={labelClass}>Rule name</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} required className={inputClass} />
+          </div>
+          <div>
+            <label className={labelClass}>Rule type</label>
+            <select value={ruleType} onChange={(e) => setRuleType(e.target.value)} className={inputClass}>
+              {RULE_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+          </div>
 
-            {ruleType === 'METRIC_THRESHOLD' && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Metric</label>
-                  <select value={metricField} onChange={(e) => setMetricField(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
-                    {METRIC_FIELDS.map((m) => (
-                      <option key={m.value} value={m.value}>{m.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Operator</label>
-                  <select value={operator} onChange={(e) => setOperator(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
-                    <option value="GREATER_THAN">Greater than</option>
-                    <option value="LESS_THAN">Less than</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Threshold</label>
-                  <input type="number" value={threshold} onChange={(e) => setThreshold(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Sustained for (seconds)</label>
-                  <input type="number" value={durationSeconds} onChange={(e) => setDurationSeconds(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
-                </div>
-              </div>
-            )}
-
-            {ruleType === 'EVENT_FREQUENCY' && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Event type</label>
-                  <input value={eventType} onChange={(e) => setEventType(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Group by field</label>
-                  <input value={groupByField} onChange={(e) => setGroupByField(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Max count</label>
-                  <input type="number" value={maxCount} onChange={(e) => setMaxCount(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Window (seconds)</label>
-                  <input type="number" value={windowSeconds} onChange={(e) => setWindowSeconds(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
-                </div>
-              </div>
-            )}
-
-            {ruleType === 'HEARTBEAT_MISSING' && (
+          {ruleType === 'METRIC_THRESHOLD' && (
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Missing for at least (seconds)</label>
-                <input type="number" value={durationSeconds} onChange={(e) => setDurationSeconds(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
+                <label className={labelClass}>Metric</label>
+                <select value={metricField} onChange={(e) => setMetricField(e.target.value)} className={inputClass}>
+                  {METRIC_FIELDS.map((m) => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </select>
               </div>
-            )}
-
-            {ruleType === 'CREDENTIAL_STUFFING' && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Min distinct IPs</label>
-                  <input type="number" value={maxCount} onChange={(e) => setMaxCount(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Window (seconds)</label>
-                  <input type="number" value={windowSeconds} onChange={(e) => setWindowSeconds(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
-                </div>
+              <div>
+                <label className={labelClass}>Operator</label>
+                <select value={operator} onChange={(e) => setOperator(e.target.value)} className={inputClass}>
+                  <option value="GREATER_THAN">Greater than</option>
+                  <option value="LESS_THAN">Less than</option>
+                </select>
               </div>
-            )}
+              <div>
+                <label className={labelClass}>Threshold</label>
+                <input type="number" value={threshold} onChange={(e) => setThreshold(e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Sustained for (seconds)</label>
+                <input type="number" value={durationSeconds} onChange={(e) => setDurationSeconds(e.target.value)} className={inputClass} />
+              </div>
+            </div>
+          )}
 
-            {ruleType === 'ANOMALY_DETECTION' && (
-              <p className="rounded-md bg-blue-50 p-3 text-xs text-blue-700">
+          {ruleType === 'EVENT_FREQUENCY' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelClass}>Event type</label>
+                <input value={eventType} onChange={(e) => setEventType(e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Group by field</label>
+                <input value={groupByField} onChange={(e) => setGroupByField(e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Max count</label>
+                <input type="number" value={maxCount} onChange={(e) => setMaxCount(e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Window (seconds)</label>
+                <input type="number" value={windowSeconds} onChange={(e) => setWindowSeconds(e.target.value)} className={inputClass} />
+              </div>
+            </div>
+          )}
+
+          {ruleType === 'HEARTBEAT_MISSING' && (
+            <div>
+              <label className={labelClass}>Missing for at least (seconds)</label>
+              <input type="number" value={durationSeconds} onChange={(e) => setDurationSeconds(e.target.value)} className={inputClass} />
+            </div>
+          )}
+
+          {ruleType === 'CREDENTIAL_STUFFING' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelClass}>Min distinct IPs</label>
+                <input type="number" value={maxCount} onChange={(e) => setMaxCount(e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Window (seconds)</label>
+                <input type="number" value={windowSeconds} onChange={(e) => setWindowSeconds(e.target.value)} className={inputClass} />
+              </div>
+            </div>
+          )}
+
+          {ruleType === 'ANOMALY_DETECTION' && (
+            <div className="flex items-start gap-2.5 rounded-lg border border-[oklch(0.62_0.19_265)]/20 bg-[oklch(0.62_0.19_265)]/10 p-3">
+              <Info className="mt-0.5 size-4 shrink-0 text-[oklch(0.55_0.19_265)] dark:text-[oklch(0.72_0.15_265)]" strokeWidth={2} />
+              <p className="text-[13px] text-foreground">
                 No extra configuration needed — this rule checks every server against its own trained LSTM-Autoencoder model on each evaluation cycle.
               </p>
-            )}
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Severity</label>
-              <select value={severity} onChange={(e) => setSeverity(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
-                <option value="LOW">Low</option>
-                <option value="MEDIUM">Medium</option>
-                <option value="HIGH">High</option>
-                <option value="CRITICAL">Critical</option>
-              </select>
             </div>
+          )}
 
-            {error && <p className="text-sm text-red-600">{error}</p>}
-            <button type="submit" disabled={saving} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+          <div>
+            <label className={labelClass}>Severity</label>
+            <select value={severity} onChange={(e) => setSeverity(e.target.value)} className={inputClass}>
+              <option value="LOW">Low</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="HIGH">High</option>
+              <option value="CRITICAL">Critical</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="submit"
+              disabled={saving}
+              className="h-9.5 rounded-md bg-[oklch(0.62_0.19_265)] px-4 text-[14px] font-bold text-white hover:bg-[oklch(0.66_0.19_265)] disabled:opacity-50"
+            >
               {saving ? 'Saving...' : editingRuleId ? 'Update rule' : 'Create rule'}
             </button>
-            <button type="button" onClick={resetForm} className="rounded-md border px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
-    Cancel
-  </button>
-          </form>
-        )}
+            <button
+              type="button"
+              onClick={resetForm}
+              className="h-9.5 rounded-md border border-border px-4 text-[14px] font-semibold text-foreground hover:bg-muted"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
 
-        <div className="rounded-lg border bg-white p-6 shadow-sm">
-          <table className="w-full text-sm">
+      <div className="rounded-xl border border-border bg-card shadow-sm">
+        {rules.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-2 px-5 py-14 text-center">
+            <div className="flex size-11 items-center justify-center rounded-full bg-muted">
+              <ListChecks className="size-5 text-muted-foreground" strokeWidth={1.75} />
+            </div>
+            <p className="text-[15px] font-bold text-foreground">No rules yet</p>
+            <p className="text-[14px] text-muted-foreground">
+              Create a rule above, or start from a quick preset.
+            </p>
+          </div>
+        ) : (
+          <table className="w-full text-[14px]">
             <thead>
-              <tr className="border-b text-left text-gray-500">
-                <th className="pb-2">Name</th>
-                <th className="pb-2">Type</th>
-                <th className="pb-2">Condition</th>
-                <th className="pb-2">Severity</th>
-                <th className="pb-2">Active</th>
-                <th className="pb-2"></th>
+              <tr className="border-b border-border text-left text-[12px] font-bold uppercase tracking-wide text-muted-foreground">
+                <th className="px-5 py-3">Name</th>
+                <th className="px-5 py-3">Type</th>
+                <th className="px-5 py-3">Condition</th>
+                <th className="px-5 py-3">Severity</th>
+                <th className="px-5 py-3">Status</th>
+                <th className="px-5 py-3"></th>
               </tr>
             </thead>
             <tbody>
               {rules.map((r) => (
-                <tr key={r.id} className="border-b last:border-0">
-                  <td className="py-2">{r.name}</td>
-                  <td className="py-2 text-gray-600">{RULE_TYPES.find((t) => t.value === r.ruleType)?.label.split(' (')[0] ?? r.ruleType}</td>
-                  <td className="py-2 text-gray-600">{describeCondition(r)}</td>
-                  <td className="py-2">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${severityColor(r.severity)}`}>{r.severity}</span>
+                <tr key={r.id} className="border-b border-border/60 last:border-0 hover:bg-muted/50">
+                  <td className="px-5 py-3.5 font-bold text-foreground">{r.name}</td>
+                  <td className="px-5 py-3.5 text-[13px] font-medium text-muted-foreground">
+                    {RULE_TYPES.find((t) => t.value === r.ruleType)?.label.split(' (')[0] ?? r.ruleType}
                   </td>
-                  <td className="py-2">
-                  <button onClick={() => handleToggle(r)} className={`rounded-full px-2 py-0.5 text-xs font-medium ${r.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                   {r.isActive ? 'Active' : 'Inactive'}
-                   </button>
-                    </td>
-                <td className="py-2">
-                      <div className="flex items-center gap-3">
-                 <button onClick={() => startEdit(r)} className="rounded-md border border-blue-200 px-2 py-1 text-xs text-blue-600 hover:bg-blue-50">
-                      Edit
-                  </button>
-                <button onClick={() => handleDelete(r)} className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">
-                     Delete
-    </button>
-  </div>
-</td>
+                  <td className="px-5 py-3.5 font-mono text-[12.5px] text-muted-foreground">{describeCondition(r)}</td>
+                  <td className="px-5 py-3.5">
+                    <Badge className={SEVERITY_STYLES[r.severity] ?? SEVERITY_STYLES.LOW}>{r.severity}</Badge>
+                  </td>
+                                    <td className="px-5 py-3.5">
+                    <button
+                      onClick={() => handleToggle(r)}
+                      className={`relative inline-block shrink-0 rounded-full transition-colors ${
+                        r.isActive ? 'bg-emerald-500' : 'bg-muted-foreground/25'
+                      }`}
+                      style={{ width: 36, height: 20 }}
+                      aria-label={r.isActive ? 'Deactivate rule' : 'Activate rule'}
+                    >
+                      <span
+                        className="absolute rounded-full bg-white shadow transition-transform"
+                        style={{
+                          width: 16,
+                          height: 16,
+                          top: 2,
+                          left: 2,
+                          transform: r.isActive ? 'translateX(16px)' : 'translateX(0)',
+                        }}
+                      />
+                    </button>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => startEdit(r)}
+                        className="flex size-7.5 items-center justify-center rounded-md border border-border text-muted-foreground hover:border-[oklch(0.62_0.19_265)] hover:text-[oklch(0.55_0.19_265)] dark:hover:text-[oklch(0.72_0.15_265)]"
+                        aria-label="Edit rule"
+                      >
+                        <Pencil className="size-3.5" strokeWidth={2} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(r)}
+                        className="flex size-7.5 items-center justify-center rounded-md border border-border text-muted-foreground hover:border-red-500/40 hover:text-red-600 dark:hover:text-red-400"
+                        aria-label="Delete rule"
+                      >
+                        <Trash2 className="size-3.5" strokeWidth={2} />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
-              {rules.length === 0 && (
-                <tr><td colSpan={6} className="py-4 text-center text-gray-400">No rules yet.</td></tr>
-              )}
             </tbody>
           </table>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -365,7 +427,9 @@ function RulesContent() {
 export default function RulesPage() {
   return (
     <ProtectedRoute>
-      <RulesContent />
+      <AppShell title="Rules">
+        <RulesContent />
+      </AppShell>
     </ProtectedRoute>
   );
 }
