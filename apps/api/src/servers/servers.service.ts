@@ -53,12 +53,19 @@ export class ServersService {
     organizationId: string,
     dto: IngestLogEventDto,
   ) {
-    return await this.eventsService.record({
+    return this.eventsService.record({
       eventType: dto.eventType,
       source: 'ssh-log-agent',
       severity: dto.outcome === 'FAILURE' ? 'WARNING' : 'INFO',
-      message: `SSH ${dto.outcome} for user "${dto.username}" from ${dto.ipAddress}`,
-      metadata: { username: dto.username, ipAddress: dto.ipAddress, serverId },
+      message: dto.command
+        ? `${dto.eventType} by "${dto.username}": ${dto.command}`
+        : `SSH ${dto.outcome} for user "${dto.username}" from ${dto.ipAddress}`,
+      metadata: {
+        username: dto.username,
+        ipAddress: dto.ipAddress,
+        serverId,
+        ...(dto.command && { command: dto.command }),
+      },
       organizationId,
     });
   }

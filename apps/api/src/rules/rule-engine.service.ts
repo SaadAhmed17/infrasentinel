@@ -167,6 +167,13 @@ export class RuleEngineService {
     for (const rule of activeAnomalyRules) {
       await this.evaluateAnomalyRule(rule);
     }
+
+    const activeUnusualAccessRules = await this.prisma.rule.findMany({
+      where: { ruleType: 'UNUSUAL_ACCESS', isActive: true },
+    });
+    for (const rule of activeUnusualAccessRules) {
+      await this.evaluateUnusualAccessRule(rule);
+    }
   }
 
   private async evaluateMetricRule(rule: {
@@ -511,6 +518,78 @@ export class RuleEngineService {
 
       this.logger.warn(
         `Alert created: ${events.length} "${rule.eventType}" events from ${rule.groupByField}="${groupValue}" (rule "${rule.id}")`,
+      );
+    }
+  }
+
+  private async evaluateUnusualAccessRule(rule: {
+    id: string;
+    organizationId: string;
+    approvedUsernames: string | null;
+    businessHourStartUTC: number | null;
+    businessHourEndUTC: number | null;
+    severity: string;
+  }) {
+    const approvedList = (rule.approvedUsernames ?? '')
+      .split(',')
+      .map((u) => u.trim())
+      .filter(Boolean);
+    const windowStart = new Date(Date.now() - 5 * 60 * 1000); // check the last 5 minutes each tick
+
+    const recentSudoEvents = await this.prisma.event.findMany({
+      where: {
+        eventType: 'SUDO_COMMAND',
+        createdAt: { gte: windowStart },
+        OR: [{ organizationId: rule.organizationId }, { organizationId: null }],
+      },
+    });
+
+    for (const event of recentSudoEvents) {
+      const metadata = event.metadata as Record<string, unknown>;
+      const username = metadata.username as string | undefined;
+      if (!username) continue;
+
+      const isUnapprovedUser =
+        approvedList.length > 0 && !approvedList.includes(username);
+
+      let isOutsideHours = false;
+      if (
+        rule.businessHourStartUTC !== null &&
+        rule.businessHourEndUTC !== null
+      ) {
+        const hour = event.createdAt.getUTCHours();
+        isOutsideHours =
+          hour < rule.businessHourStartUTC || hour >= rule.businessHourEndUTC;
+      }
+
+      if (!isUnapprovedUser && !isOutsideHours) continue;
+
+      const existingOpenAlert = await this.prisma.alert.findFirst({
+        where: {
+          ruleId: rule.id,
+          status: 'OPEN',
+          details: { path: ['eventId'], equals: event.id },
+        },
+      });
+      if (existingOpenAlert) continue;
+
+      await this.prisma.alert.create({
+        data: {
+          ruleId: rule.id,
+          details: {
+            eventId: event.id,
+            username,
+            reason: isUnapprovedUser
+              ? 'unapproved_user'
+              : 'outside_business_hours',
+            command: metadata.command ?? null,
+          },
+          status: 'OPEN',
+        },
+      });
+
+      this.logger.warn(
+        `Alert created: unusual sudo access by "${username}" (${isUnapprovedUser ? 'unapproved user' : 'outside business hours'}) (rule "${rule.id}")`,
       );
     }
   }

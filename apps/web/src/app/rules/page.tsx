@@ -19,6 +19,9 @@ interface Rule {
   windowSeconds: number | null;
   severity: string;
   isActive: boolean;
+  approvedUsernames: string | null;
+  businessHourStartUTC: number | null;
+  businessHourEndUTC: number | null;
 }
 
 const RULE_TYPES = [
@@ -27,6 +30,7 @@ const RULE_TYPES = [
   { value: 'HEARTBEAT_MISSING', label: 'Heartbeat Missing (e.g. service crash)' },
   { value: 'CREDENTIAL_STUFFING', label: 'Credential Stuffing (multi-IP failures then success)' },
   { value: 'ANOMALY_DETECTION', label: 'AI Anomaly Detection (LSTM-Autoencoder)' },
+  { value: 'UNUSUAL_ACCESS', label: 'Unauthorized Root Access (sudo, unknown user or off-hours)' },
 ];
 
 const METRIC_FIELDS = [
@@ -62,6 +66,8 @@ function describeCondition(r: Rule) {
       return `${r.maxCount}+ distinct IPs failing then succeeding, within ${r.windowSeconds}s`;
     case 'ANOMALY_DETECTION':
       return 'LSTM reconstruction error exceeds per-server threshold';
+    case 'UNUSUAL_ACCESS':
+      return `sudo by unapproved user, or outside business hours`;
     default:
       return '—';
   }
@@ -83,6 +89,9 @@ function RulesContent() {
   const [windowSeconds, setWindowSeconds] = useState('600');
   const [severity, setSeverity] = useState('MEDIUM');
   const [saving, setSaving] = useState(false);
+  const [approvedUsernames, setApprovedUsernames] = useState('saad');
+  const [businessHourStartUTC, setBusinessHourStartUTC] = useState('9');
+  const [businessHourEndUTC, setBusinessHourEndUTC] = useState('18');
 
   function loadRules() {
     apiClient.get<Rule[]>('/rules').then(setRules).catch((err) => setError(err.message));
@@ -92,6 +101,7 @@ function RulesContent() {
   { label: 'Web Login Brute-Force', ruleType: 'EVENT_FREQUENCY', eventType: 'AUTH_LOGIN_FAILURE', groupByField: 'ipAddress', maxCount: '10', windowSeconds: '300', severity: 'HIGH' },
   { label: 'High CPU', ruleType: 'METRIC_THRESHOLD', metricField: 'CPU_USAGE', operator: 'GREATER_THAN', threshold: '85', durationSeconds: '60', severity: 'HIGH' },
   { label: 'Service Crash', ruleType: 'HEARTBEAT_MISSING', durationSeconds: '30', severity: 'CRITICAL' },
+  { label: 'Unauthorized Root Access', ruleType: 'UNUSUAL_ACCESS', severity: 'HIGH' },
 ];
 
   useEffect(() => {
@@ -113,6 +123,14 @@ function RulesContent() {
         payload = { ...payload, durationSeconds: Number(durationSeconds) };
       } else if (ruleType === 'CREDENTIAL_STUFFING') {
         payload = { ...payload, windowSeconds: Number(windowSeconds), maxCount: Number(maxCount) };
+      }
+        else if (ruleType === 'UNUSUAL_ACCESS') {
+        payload = {
+          ...payload,
+          approvedUsernames,
+          businessHourStartUTC: businessHourStartUTC ? Number(businessHourStartUTC) : null,
+          businessHourEndUTC: businessHourEndUTC ? Number(businessHourEndUTC) : null,
+        };
       }
 
       if (editingRuleId) {
@@ -157,6 +175,9 @@ function RulesContent() {
     setWindowSeconds(String(r.windowSeconds ?? '600'));
     setSeverity(r.severity);
     setShowForm(true);
+    setApprovedUsernames(r.approvedUsernames ?? 'saad');
+    setBusinessHourStartUTC(String(r.businessHourStartUTC ?? '9'));
+    setBusinessHourEndUTC(String(r.businessHourEndUTC ?? '18'));
   }
 
   function resetForm() {
@@ -291,6 +312,52 @@ function RulesContent() {
               <p className="rounded-md bg-blue-50 p-3 text-xs text-blue-700">
                 No extra configuration needed — this rule checks every server against its own trained LSTM-Autoencoder model on each evaluation cycle.
               </p>
+            )}
+
+                        {ruleType === 'UNUSUAL_ACCESS' && (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Approved usernames (comma-separated)
+                  </label>
+                  <input
+                    value={approvedUsernames}
+                    onChange={(e) => setApprovedUsernames(e.target.value)}
+                    placeholder="saad, hashim"
+                    className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  />
+                  <p className="mt-1 text-xs text-gray-400">
+                    Leave blank to skip the unapproved-user check and only flag off-hours access.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Business hours start (UTC)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="23"
+                      value={businessHourStartUTC}
+                      onChange={(e) => setBusinessHourStartUTC(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Business hours end (UTC)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="23"
+                      value={businessHourEndUTC}
+                      onChange={(e) => setBusinessHourEndUTC(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    />
+                  </div>
+                </div>
+                <p className="rounded-md bg-blue-50 p-3 text-xs text-blue-700">
+                  Watches real <code>sudo</code> commands shipped from your VMs&apos; auth logs. Flags any command run by a user not on the approved list, or run outside the configured business-hour window (UTC).
+                </p>
+              </div>
             )}
 
             <div>
