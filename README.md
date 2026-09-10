@@ -6,14 +6,14 @@ A centralized, agent-based monitoring platform that collects real-time server me
 
 ## Status
 
-Active development — Final Year Project (FYP), Air University Islamabad. Core platform substantially built across eight phases; SIEM, LSTM anomaly detection, and RAG assistant all working with verified, real-data evidence.
+Active development — Final Year Project (FYP), Air University Islamabad. Core platform substantially built; SIEM, LSTM anomaly detection, and RAG assistant all working with verified, real-data evidence across 6 of 15 target attack categories.
 
 ## Architecture
 
 - **`apps/web`** — Next.js 15 + Tailwind + shadcn/ui dashboard
-- **`apps/api`** — NestJS (Fastify) backend: auth, multi-tenancy, RBAC, organizations, servers, SIEM rule engine, anomaly/RAG proxies
+- **`apps/api`** — NestJS (Fastify) backend: auth, multi-tenancy, RBAC, organizations, servers, SIEM rule engine, anomaly/RAG proxies, API-usage middleware
 - **`apps/ai-service`** — Python FastAPI: LSTM-Autoencoder anomaly detection, RAG-based AI incident assistant
-- **`apps/agent`** — Lightweight Python agent (psutil) that runs on monitored servers, pushing metrics via API key; also ships real SSH auth-log events
+- **`apps/agent`** — Lightweight Python agent (psutil) on monitored servers, pushing metrics via API key; also ships real SSH auth-log and sudo-command events
 
 ## Tech Stack
 
@@ -28,31 +28,26 @@ Active development — Final Year Project (FYP), Air University Islamabad. Core 
 
 ## Features Implemented So Far
 
-- [x] Multi-tenant architecture (Organization → Users, discriminator-column pattern)
-- [x] Custom JWT auth with refresh tokens (silent refresh on frontend), RBAC via roles
+- [x] Multi-tenant architecture, JWT auth with refresh tokens, 6-role RBAC
 - [x] Organization invitations and full member/role management UI
-- [x] Server registration with API-key-based agent authentication
-- [x] Real-time metrics ingestion — 9 features: CPU, memory, disk usage, network I/O, disk I/O rate, process count, load average
-- [x] Live dashboard: server list, per-server multi-panel metrics charts (Recharts)
-- [x] Generic event/log pipeline (Event model) — auth events and real SSH auth-log events, both with IP tracking
-- [x] SIEM rule engine — 5 rule types: metric-threshold, event-frequency, heartbeat-missing, credential-stuffing, anomaly-detection
-- [x] Alert-to-incident correlation; full Rules/Incidents UI with create, edit, delete, and one-click presets
-- [x] Confirmed real-data attack detections: SSH brute-force, web login brute-force, credential stuffing, service crash (heartbeat)
+- [x] Server monitoring: 9-feature metrics, live multi-panel dashboards, full server CRUD (create/rename/delete), 3 genuinely separate VMs
+- [x] Generic event/log pipeline — auth events, real SSH auth-log events, real sudo-command events, API request logging, all with IP/user tracking
+- [x] SIEM rule engine — 6 rule types; full Rules/Incidents UI with create, edit, delete, one-click presets
+- [x] Confirmed real-data attack detections: SSH brute-force, web login brute-force, credential stuffing, service crash, unauthorized root access, API abuse (6 of 15 scope-document attack types)
 - [x] LSTM-Autoencoder anomaly detection — per-server trained models, real-time inference, auto-alerting integrated into the SIEM pipeline, live dashboard badge
-- [x] RAG AI Incident Assistant — pgvector retrieval, multi-tenant isolated at the query level, Groq generation, source-attributed chat UI
+- [x] RAG AI Incident Assistant — pgvector retrieval, multi-tenant isolated, hybrid semantic + recency search, date-aware generation, source-attributed chat UI, automatic incident indexing (no manual reindex needed)
 - [x] Dashboard overview page — live server/incident/rule summary, recent alerts feed
-- [x] CI pipeline (lint + build on every PR, required to pass before merge), unit tests for core auth/rule logic
+- [x] CI pipeline (lint + build required before merge), unit tests for core auth/rule-engine logic
 
 ## Not Yet Built (Roadmap)
 
-- [ ] RAG Stage 3 (auto-index new incidents on creation, instead of manual reindex)
-- [ ] SIEM Tier 2/3 rules (unauthorized root access, API abuse, ransomware disk-write, port scanning, cryptomining)
-- [ ] Server edit/delete UI
+- [ ] Remaining 9 SIEM attack types (data exfiltration, log tampering, port scanning, ransomware, insider threat, cryptomining, direct DB attack, DoS — partially covered by LSTM)
 - [ ] Notifications (email)
+- [ ] Billing/subscription tiers (planned for commercial launch)
 
 ## AI / Anomaly Detection Architecture
 
-`apps/ai-service` trains a separate LSTM-Autoencoder per monitored server (not one shared model), since each server has a different normal baseline. Pipeline:
+`apps/ai-service` trains a separate LSTM-Autoencoder per monitored server, since each server has a different normal baseline. Pipeline:
 
 1. `data_pipeline.py` — pulls raw metrics per server from Neon
 2. `preprocess.py` — drops nulls, log-transforms skewed features (network/disk I/O), normalizes via per-server MinMaxScaler, builds sliding-window sequences (20 timesteps)
@@ -64,9 +59,10 @@ Active development — Final Year Project (FYP), Air University Islamabad. Core 
 
 1. `rag.py` builds a plain-text summary of each Incident + its Alerts
 2. Summaries are embedded (`sentence-transformers`, 384-dim) and stored in Postgres via `pgvector`
-3. A question is embedded the same way; cosine-similarity search runs **within the same SQL query as the organization filter**, so one tenant's incidents are never retrievable by another
-4. Retrieved incidents are passed as context to Groq (`openai/gpt-oss-120b`), which is instructed to answer only from that context and say so honestly if it can't
-5. NestJS (`RagModule`) resolves `organizationId` from the authenticated JWT — it is never trusted from client input
+3. New incidents are embedded automatically the moment they're created — no manual reindex required for normal use
+4. A question is embedded the same way; retrieval combines cosine-similarity search with the most recent incidents (hybrid retrieval), so date/recency questions work correctly — all filtered by organization **within the same SQL query**, so one tenant's incidents are never retrievable by another
+5. Retrieved incidents plus the current date are passed to Groq (`openai/gpt-oss-120b`), which is instructed to answer only from that context and say so honestly if it can't
+6. NestJS (`RagModule`) resolves `organizationId` from the authenticated JWT — never trusted from client input
 
 ## Local Development
 
