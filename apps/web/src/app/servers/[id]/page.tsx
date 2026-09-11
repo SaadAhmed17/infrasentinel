@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -39,29 +39,31 @@ function ServerDetailContent() {
   const [error, setError] = useState('');
   const [anomalyScore, setAnomalyScore] = useState<AnomalyScore | null>(null);
 
-  function loadAnomalyScore() {
-    apiClient
-      .get<AnomalyScore>(`/servers/${serverId}/anomaly-score`)
-      .then(setAnomalyScore)
-      .catch(() => setAnomalyScore(null));
-  }
+  const loadAnomalyScore = useCallback(() => {
+  apiClient
+    .get<AnomalyScore>(`/servers/${serverId}/anomaly-score`)
+    .then(setAnomalyScore)
+    .catch(() => setAnomalyScore(null));
+}, [serverId]);
   
-  function loadData() {
-    apiClient
-      .get<ServerDetail>(`/servers/${serverId}/metrics?limit=50`)
-      .then(setData)
-      .catch((err) => setError(err.message));
-  }
+  const loadData = useCallback(() => {
+  apiClient
+    .get<ServerDetail>(`/servers/${serverId}/metrics?limit=50`)
+    .then(setData)
+    .catch((err) => setError(err.message));
+}, [serverId]);
 
   useEffect(() => {
+  loadData();
+  loadAnomalyScore();
+
+  const interval = setInterval(() => {
     loadData();
     loadAnomalyScore();
-    const interval = setInterval(() => {
-      loadData();
-      loadAnomalyScore();
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [serverId]);
+  }, 10000);
+
+  return () => clearInterval(interval);
+}, [loadData, loadAnomalyScore]);
 
   if (error) {
     return <div className="p-8 text-red-600">{error}</div>;
