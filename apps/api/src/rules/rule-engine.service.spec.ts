@@ -2,7 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { RuleEngineService } from './rule-engine.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AnomalyService } from '../anomaly/anomaly.service';
-import { beforeEach, describe, it } from 'node:test';
+import { RagService } from '../rag/rag.service';
+import { describe } from 'node:test';
 
 describe('RuleEngineService', () => {
   let service: RuleEngineService;
@@ -30,6 +31,7 @@ describe('RuleEngineService', () => {
         RuleEngineService,
         { provide: PrismaService, useValue: prisma },
         { provide: AnomalyService, useValue: { getAnomalyScore: jest.fn() } },
+        { provide: RagService, useValue: { indexIncident: jest.fn() } },
       ],
     }).compile();
 

@@ -1,10 +1,12 @@
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  extensions = [vector]
 }
 
 model Organization {
@@ -64,6 +66,7 @@ enum RuleType {
   HEARTBEAT_MISSING
   CREDENTIAL_STUFFING
   ANOMALY_DETECTION
+  UNUSUAL_ACCESS
 }
 
 enum MetricField {
@@ -113,6 +116,10 @@ model Rule {
   organization    Organization        @relation(fields: [organizationId], references: [id])
   alerts          Alert[]
   createdAt       DateTime            @default(now())
+  
+  approvedUsernames   String?         // comma-separated, e.g. "saad,hashim"
+  businessHourStartUTC Int?           // 0-23
+  businessHourEndUTC   Int?           // 0-23
 }
 
 enum AlertStatus {
@@ -152,6 +159,7 @@ model Incident {
   alerts         Alert[]
   createdAt      DateTime       @default(now())
   resolvedAt     DateTime?
+  embedding IncidentEmbedding?
 }
 
 model Metric {
@@ -207,4 +215,16 @@ model User {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   createdAt      DateTime     @default(now())
+}
+
+model IncidentEmbedding {
+  id             String   @id @default(uuid())
+  incidentId     String   @unique
+  incident       Incident @relation(fields: [incidentId], references: [id])
+  organizationId String
+  content        String
+  embedding      Unsupported("vector(384)")
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId])
 }

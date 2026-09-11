@@ -1,4 +1,4 @@
-import { IsIn, IsString } from 'class-validator';
+import { IsIn, IsString, IsOptional } from 'class-validator';
 
 export class IngestLogEventDto {
   @IsString()
@@ -12,4 +12,8 @@ export class IngestLogEventDto {
 
   @IsString()
   ipAddress!: string;
+
+  @IsOptional()
+  @IsString()
+  command?: string;
 }
