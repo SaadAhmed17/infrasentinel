@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -10,6 +10,7 @@ import { RulesModule } from './rules/rules.module';
 import { IncidentsModule } from './incidents/incidents.module';
 import { AnomalyModule } from './anomaly/anomaly.module';
 import { RagModule } from './rag/rag.module';
+import { ApiUsageMiddleware } from './events/api-usage.middleware';
 
 @Module({
   imports: [
@@ -22,8 +23,13 @@ import { RagModule } from './rag/rag.module';
     IncidentsModule,
     AnomalyModule,
     RagModule,
+    EventsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(ApiUsageMiddleware).forRoutes('*');
+  }
+}

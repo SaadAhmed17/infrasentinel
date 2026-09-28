@@ -6,6 +6,8 @@ import {
   Post,
   Query,
   UseGuards,
+  Patch,
+  Delete,
 } from '@nestjs/common';
 import { ServersService } from './servers.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -45,5 +47,26 @@ export class ServersController {
       serverId,
       limit ? parseInt(limit) : 50,
     );
+  }
+
+  @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles('OWNER', 'ADMIN', 'DEVOPS_ENGINEER')
+  updateServer(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body('name') name: string,
+  ) {
+    return this.serversService.updateServer(user.organizationId, id, name);
+  }
+
+  @Delete(':id')
+  @UseGuards(RolesGuard)
+  @Roles('OWNER', 'ADMIN', 'DEVOPS_ENGINEER')
+  deleteServer(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.serversService.deleteServer(user.organizationId, id);
   }
 }

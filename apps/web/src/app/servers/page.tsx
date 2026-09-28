@@ -12,6 +12,9 @@ import {
   X,
   Circle,
   Eye,
+  Pencil,
+  Trash2,
+  Check,
 } from 'lucide-react';
 
 interface Server {
@@ -45,6 +48,8 @@ function ServersContent() {
   const [creating, setCreating] = useState(false);
   const [newApiKey, setNewApiKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [editingServerId, setEditingServerId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
 
   function loadServers() {
     apiClient
@@ -81,6 +86,19 @@ function ServersContent() {
     navigator.clipboard.writeText(newApiKey);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  }
+
+  async function handleRename(id: string) {
+    await apiClient.patch(`/servers/${id}`, { name: editName });
+    setEditingServerId(null);
+    loadServers();
+  }
+
+  async function handleDeleteServer(id: string, name: string) {
+    if (confirm(`Delete server "${name}"? This permanently removes its metrics and alert history.`)) {
+      await apiClient.delete(`/servers/${id}`);
+      loadServers();
+    }
   }
 
   const onlineCount = servers.filter((s) => s.status === 'ONLINE').length;
@@ -191,12 +209,39 @@ function ServersContent() {
             <tbody>
               {servers.map((s) => {
                 const st = STATUS_STYLES[s.status];
+                const isEditing = editingServerId === s.id;
                 return (
                   <tr key={s.id} className="border-b border-border/60 last:border-0 hover:bg-muted/50">
                     <td className="px-5 py-3.5">
-                      <p className="text-[14.5px] font-bold text-foreground">{s.name}</p>
-                      {s.hostname && (
-                        <p className="text-[13px] text-muted-foreground">{s.hostname}</p>
+                      {isEditing ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            className="h-8 rounded-md border border-border bg-background px-2.5 text-[14px] text-foreground outline-none focus:border-[oklch(0.62_0.19_265)] focus:ring-2 focus:ring-[oklch(0.62_0.19_265)]/20"
+                          />
+                          <button
+                            onClick={() => handleRename(s.id)}
+                            className="flex size-7.5 items-center justify-center rounded-md border border-border text-muted-foreground hover:border-emerald-500/40 hover:text-emerald-600 dark:hover:text-emerald-400"
+                            aria-label="Save name"
+                          >
+                            <Check className="size-3.5" strokeWidth={2} />
+                          </button>
+                          <button
+                            onClick={() => setEditingServerId(null)}
+                            className="flex size-7.5 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted"
+                            aria-label="Cancel"
+                          >
+                            <X className="size-3.5" strokeWidth={2} />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="text-[14.5px] font-bold text-foreground">{s.name}</p>
+                          {s.hostname && (
+                            <p className="text-[13px] text-muted-foreground">{s.hostname}</p>
+                          )}
+                        </>
                       )}
                     </td>
                     <td className="px-5 py-3.5">
@@ -209,13 +254,29 @@ function ServersContent() {
                       {timeSince(s.lastHeartbeat)}
                     </td>
                     <td className="px-5 py-3.5 text-right">
-                      <Link
-                        href={`/servers/${s.id}`}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-[13px] font-bold text-foreground transition-colors hover:border-[oklch(0.62_0.19_265)] hover:bg-[oklch(0.62_0.19_265)]/10 hover:text-[oklch(0.55_0.19_265)] dark:hover:text-[oklch(0.72_0.15_265)]"
-                      >
-                        <Eye className="size-3.5" strokeWidth={2} />
-                        View Details
-                      </Link>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Link
+                          href={`/servers/${s.id}`}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-[13px] font-bold text-foreground transition-colors hover:border-[oklch(0.62_0.19_265)] hover:bg-[oklch(0.62_0.19_265)]/10 hover:text-[oklch(0.55_0.19_265)] dark:hover:text-[oklch(0.72_0.15_265)]"
+                        >
+                          <Eye className="size-3.5" strokeWidth={2} />
+                          View Details
+                        </Link>
+                        <button
+                          onClick={() => { setEditingServerId(s.id); setEditName(s.name); }}
+                          className="flex size-7.5 items-center justify-center rounded-md border border-border text-muted-foreground hover:border-[oklch(0.62_0.19_265)] hover:text-[oklch(0.55_0.19_265)] dark:hover:text-[oklch(0.72_0.15_265)]"
+                          aria-label="Edit server"
+                        >
+                          <Pencil className="size-3.5" strokeWidth={2} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteServer(s.id, s.name)}
+                          className="flex size-7.5 items-center justify-center rounded-md border border-border text-muted-foreground hover:border-red-500/40 hover:text-red-600 dark:hover:text-red-400"
+                          aria-label="Delete server"
+                        >
+                          <Trash2 className="size-3.5" strokeWidth={2} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );

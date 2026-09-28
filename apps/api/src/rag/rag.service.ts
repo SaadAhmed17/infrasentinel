@@ -53,4 +53,21 @@ export class RagService {
 
     return response.json() as Promise<RagReindexResponse>;
   }
+
+  async indexIncident(
+    incidentId: string,
+    organizationId: string,
+  ): Promise<void> {
+    try {
+      await fetch(`${this.aiServiceUrl}/rag/index-incident`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ incidentId, organizationId }),
+      });
+    } catch (err) {
+      // Auto-indexing failure should never block incident creation itself —
+      // worst case, the incident just isn't searchable until the next manual reindex.
+      this.logger.error(`Failed to auto-index incident ${incidentId}: ${err}`);
+    }
+  }
 }

@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime, timezone
 
 import psycopg2
 from dotenv import load_dotenv
@@ -119,18 +120,11 @@ def reindex_organization(organization_id: str) -> dict:
 
 
 def query_incidents(organization_id: str, question: str, top_k: int = 5) -> dict:
-    """
-    Embed the question, find the top_k most similar incidents FOR THIS ORG ONLY,
-    then ask Groq to answer using only that retrieved context.
-    """
     question_vector = embed_text(question)
 
     conn = get_connection()
     cur = conn.cursor()
 
-    # <=> is pgvector's cosine-distance operator — lower distance means more similar.
-    # The organizationId filter runs in the SAME query as the similarity search,
-    # so a different org's incidents are never even considered, not just filtered out after.
     cur.execute(
         """
         SELECT ie."incidentId", ie.content, i.title, i.severity, i.status,
@@ -143,9 +137,30 @@ def query_incidents(organization_id: str, question: str, top_k: int = 5) -> dict
         """,
         (question_vector, organization_id, top_k),
     )
-    rows = cur.fetchall()
+    semantic_rows = cur.fetchall()
+
+    cur.execute(
+        """
+        SELECT ie."incidentId", ie.content, i.title, i.severity, i.status, 0.5 AS distance
+        FROM "IncidentEmbedding" ie
+        JOIN "Incident" i ON ie."incidentId" = i.id
+        WHERE ie."organizationId" = %s
+        ORDER BY i."createdAt" DESC
+        LIMIT 3
+        """,
+        (organization_id,),
+    )
+    recent_rows = cur.fetchall()
+
     cur.close()
     conn.close()
+
+    seen_ids = set()
+    rows = []
+    for row in semantic_rows + recent_rows:
+        if row[0] not in seen_ids:
+            seen_ids.add(row[0])
+            rows.append(row)
 
     if not rows:
         return {
@@ -156,8 +171,11 @@ def query_incidents(organization_id: str, question: str, top_k: int = 5) -> dict
     context_blocks = [row[1] for row in rows]
     context_text = "\n\n---\n\n".join(context_blocks)
 
+    current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
     system_prompt = (
-        "You are an incident analysis assistant for InfraSentinel, a server monitoring platform. "
+        f"You are an incident analysis assistant for InfraSentinel, a server monitoring platform. "
+        f"The current date and time is {current_time}. "
         "Answer the user's question using ONLY the incident data provided below. "
         "If the provided incidents don't contain enough information to answer, say so honestly "
         "rather than guessing or using outside knowledge."
@@ -182,3 +200,64 @@ def query_incidents(organization_id: str, question: str, top_k: int = 5) -> dict
     ]
 
     return {"answer": answer, "sources": sources}
+
+
+def index_single_incident(incident_id: str, organization_id: str) -> dict:
+    """
+    Embed (or re-embed) exactly one incident. Used for auto-indexing right
+    after an incident is created, instead of a full org reindex every time.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        SELECT i.id, i.title, i.severity, i.status, i."createdAt"
+        FROM "Incident" i
+        WHERE i.id = %s AND i."organizationId" = %s
+        """,
+        (incident_id, organization_id),
+    )
+    incident_row = cur.fetchone()
+    if not incident_row:
+        cur.close()
+        conn.close()
+        return {"indexed": False, "reason": "incident not found for this organization"}
+
+    _, title, severity, status, created_at = incident_row
+
+    cur.execute(
+        """
+        SELECT r.name, s.name, a.details
+        FROM "Alert" a
+        JOIN "Rule" r ON a."ruleId" = r.id
+        LEFT JOIN "Server" s ON a."serverId" = s.id
+        WHERE a."incidentId" = %s
+        """,
+        (incident_id,),
+    )
+    alert_rows = cur.fetchall()
+    alerts = [{"rule_name": r[0], "server_name": r[1], "details": r[2]}
+              for r in alert_rows]
+
+    summary = build_incident_summary(
+        {"title": title, "severity": severity,
+            "status": status, "createdAt": str(created_at)},
+        alerts,
+    )
+    vector = embed_text(summary)
+
+    cur.execute(
+        """
+        INSERT INTO "IncidentEmbedding" (id, "incidentId", "organizationId", content, embedding, "createdAt")
+        VALUES (gen_random_uuid(), %s, %s, %s, %s::vector, NOW())
+        ON CONFLICT ("incidentId")
+        DO UPDATE SET content = EXCLUDED.content, embedding = EXCLUDED.embedding
+        """,
+        (incident_id, organization_id, summary, vector),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return {"indexed": True, "incidentId": incident_id}

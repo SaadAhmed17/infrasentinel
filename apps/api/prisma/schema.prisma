@@ -66,6 +66,7 @@ enum RuleType {
   HEARTBEAT_MISSING
   CREDENTIAL_STUFFING
   ANOMALY_DETECTION
+  UNUSUAL_ACCESS
 }
 
 enum MetricField {
@@ -115,6 +116,10 @@ model Rule {
   organization    Organization        @relation(fields: [organizationId], references: [id])
   alerts          Alert[]
   createdAt       DateTime            @default(now())
+  
+  approvedUsernames   String?         // comma-separated, e.g. "saad,hashim"
+  businessHourStartUTC Int?           // 0-23
+  businessHourEndUTC   Int?           // 0-23
 }
 
 enum AlertStatus {

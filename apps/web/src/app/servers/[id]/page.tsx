@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -88,29 +88,31 @@ function ServerDetailContent() {
   const [error, setError] = useState('');
   const [anomalyScore, setAnomalyScore] = useState<AnomalyScore | null>(null);
 
-  function loadAnomalyScore() {
+  const loadAnomalyScore = useCallback(() => {
     apiClient
       .get<AnomalyScore>(`/servers/${serverId}/anomaly-score`)
       .then(setAnomalyScore)
       .catch(() => setAnomalyScore(null));
-  }
+  }, [serverId]);
 
-  function loadData() {
+  const loadData = useCallback(() => {
     apiClient
       .get<ServerDetail>(`/servers/${serverId}/metrics?limit=50`)
       .then(setData)
       .catch((err) => setError(err.message));
-  }
+  }, [serverId]);
 
   useEffect(() => {
     loadData();
     loadAnomalyScore();
+
     const interval = setInterval(() => {
       loadData();
       loadAnomalyScore();
     }, 10000);
+
     return () => clearInterval(interval);
-  }, [serverId]);
+  }, [loadData, loadAnomalyScore]);
 
   const title = data?.server.name ?? 'Server';
 

@@ -21,6 +21,9 @@ interface Rule {
   windowSeconds: number | null;
   severity: string;
   isActive: boolean;
+  approvedUsernames: string | null;
+  businessHourStartUTC: number | null;
+  businessHourEndUTC: number | null;
 }
 
 const RULE_TYPES = [
@@ -29,6 +32,7 @@ const RULE_TYPES = [
   { value: 'HEARTBEAT_MISSING', label: 'Heartbeat Missing (e.g. service crash)' },
   { value: 'CREDENTIAL_STUFFING', label: 'Credential Stuffing (multi-IP failures then success)' },
   { value: 'ANOMALY_DETECTION', label: 'AI Anomaly Detection (LSTM-Autoencoder)' },
+  { value: 'UNUSUAL_ACCESS', label: 'Unauthorized Root Access (sudo, unknown user or off-hours)' },
 ];
 
 const METRIC_FIELDS = [
@@ -62,6 +66,8 @@ function describeCondition(r: Rule) {
       return `${r.maxCount}+ distinct IPs failing then succeeding, within ${r.windowSeconds}s`;
     case 'ANOMALY_DETECTION':
       return 'LSTM reconstruction error exceeds per-server threshold';
+    case 'UNUSUAL_ACCESS':
+      return `sudo by unapproved user, or outside business hours`;
     default:
       return '—';
   }
@@ -88,6 +94,9 @@ function RulesContent() {
   const [severity, setSeverity] = useState('MEDIUM');
   const [saving, setSaving] = useState(false);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [approvedUsernames, setApprovedUsernames] = useState('saad');
+  const [businessHourStartUTC, setBusinessHourStartUTC] = useState('9');
+  const [businessHourEndUTC, setBusinessHourEndUTC] = useState('18');
 
   function loadRules() {
     apiClient.get<Rule[]>('/rules').then(setRules).catch((err) => setError(err.message));
@@ -98,6 +107,7 @@ function RulesContent() {
     { label: 'Web Login Brute-Force', ruleType: 'EVENT_FREQUENCY', eventType: 'AUTH_LOGIN_FAILURE', groupByField: 'ipAddress', maxCount: '10', windowSeconds: '300', severity: 'HIGH' },
     { label: 'High CPU', ruleType: 'METRIC_THRESHOLD', metricField: 'CPU_USAGE', operator: 'GREATER_THAN', threshold: '85', durationSeconds: '60', severity: 'HIGH' },
     { label: 'Service Crash', ruleType: 'HEARTBEAT_MISSING', durationSeconds: '30', severity: 'CRITICAL' },
+    { label: 'Unauthorized Root Access', ruleType: 'UNUSUAL_ACCESS', severity: 'HIGH' },
   ];
 
   useEffect(() => {
@@ -119,6 +129,13 @@ function RulesContent() {
         payload = { ...payload, durationSeconds: Number(durationSeconds) };
       } else if (ruleType === 'CREDENTIAL_STUFFING') {
         payload = { ...payload, windowSeconds: Number(windowSeconds), maxCount: Number(maxCount) };
+      } else if (ruleType === 'UNUSUAL_ACCESS') {
+        payload = {
+          ...payload,
+          approvedUsernames,
+          businessHourStartUTC: businessHourStartUTC ? Number(businessHourStartUTC) : null,
+          businessHourEndUTC: businessHourEndUTC ? Number(businessHourEndUTC) : null,
+        };
       }
 
       if (editingRuleId) {
@@ -161,6 +178,9 @@ function RulesContent() {
     setWindowSeconds(String(r.windowSeconds ?? '600'));
     setSeverity(r.severity);
     setShowForm(true);
+    setApprovedUsernames(r.approvedUsernames ?? 'saad');
+    setBusinessHourStartUTC(String(r.businessHourStartUTC ?? '9'));
+    setBusinessHourEndUTC(String(r.businessHourEndUTC ?? '18'));
   }
 
   function resetForm() {
@@ -312,6 +332,53 @@ function RulesContent() {
             </div>
           )}
 
+          {ruleType === 'UNUSUAL_ACCESS' && (
+            <div className="space-y-3">
+              <div>
+                <label className={labelClass}>Approved usernames (comma-separated)</label>
+                <input
+                  value={approvedUsernames}
+                  onChange={(e) => setApprovedUsernames(e.target.value)}
+                  placeholder="saad, hashim"
+                  className={inputClass}
+                />
+                <p className="mt-1 text-[12px] text-muted-foreground">
+                  Leave blank to skip the unapproved-user check and only flag off-hours access.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelClass}>Business hours start (UTC)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="23"
+                    value={businessHourStartUTC}
+                    onChange={(e) => setBusinessHourStartUTC(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Business hours end (UTC)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="23"
+                    value={businessHourEndUTC}
+                    onChange={(e) => setBusinessHourEndUTC(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5 rounded-lg border border-[oklch(0.62_0.19_265)]/20 bg-[oklch(0.62_0.19_265)]/10 p-3">
+                <Info className="mt-0.5 size-4 shrink-0 text-[oklch(0.55_0.19_265)] dark:text-[oklch(0.72_0.15_265)]" strokeWidth={2} />
+                <p className="text-[13px] text-foreground">
+                  Watches real <code>sudo</code> commands shipped from your VMs&apos; auth logs. Flags any command run by a user not on the approved list, or run outside the configured business-hour window (UTC).
+                </p>
+              </div>
+            </div>
+          )}
+
           <div>
             <label className={labelClass}>Severity</label>
             <select value={severity} onChange={(e) => setSeverity(e.target.value)} className={inputClass}>
@@ -375,7 +442,7 @@ function RulesContent() {
                   <td className="px-5 py-3.5">
                     <Badge className={SEVERITY_STYLES[r.severity] ?? SEVERITY_STYLES.LOW}>{r.severity}</Badge>
                   </td>
-                                    <td className="px-5 py-3.5">
+                  <td className="px-5 py-3.5">
                     <button
                       onClick={() => handleToggle(r)}
                       className={`relative inline-block shrink-0 rounded-full transition-colors ${
