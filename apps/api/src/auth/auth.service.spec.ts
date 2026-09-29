@@ -5,7 +5,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import { EventsService } from '../events/events.service';
 import * as bcrypt from 'bcrypt';
-import { describe } from 'node:test';
 
 describe('AuthService', () => {
   let service: AuthService;

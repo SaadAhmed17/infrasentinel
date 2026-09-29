@@ -3,7 +3,6 @@ import { RuleEngineService } from './rule-engine.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AnomalyService } from '../anomaly/anomaly.service';
 import { RagService } from '../rag/rag.service';
-import { describe } from 'node:test';
 
 describe('RuleEngineService', () => {
   let service: RuleEngineService;
@@ -41,6 +40,37 @@ describe('RuleEngineService', () => {
   it('does nothing when no active rules exist', async () => {
     await service.evaluateRules();
     expect(prisma.alert.create).not.toHaveBeenCalled();
+  });
+
+  // Positive control for the de-duplication test below: without it, that test
+  // would still pass if the engine never created any alert at all.
+  it('creates an alert when every reading breaches and none is already OPEN', async () => {
+    prisma.rule.findMany.mockResolvedValueOnce([
+      {
+        id: 'rule-1',
+        organizationId: 'org-1',
+        metricField: 'CPU_USAGE',
+        operator: 'GREATER_THAN',
+        threshold: 80,
+        durationSeconds: 60,
+        severity: 'HIGH',
+      },
+    ]);
+    prisma.server.findMany.mockResolvedValue([
+      { id: 'server-1', name: 'Test Server', organizationId: 'org-1' },
+    ]);
+    prisma.metric.findMany.mockResolvedValue([
+      { cpuUsage: 95, memUsage: 50, diskUsage: 50, timestamp: new Date() },
+    ]);
+    prisma.alert.findFirst.mockResolvedValue(null);
+
+    await service.evaluateRules();
+
+    expect(prisma.alert.create).toHaveBeenCalledTimes(1);
+    const [[createArgs]] = prisma.alert.create.mock.calls as [[unknown]];
+    expect(createArgs).toMatchObject({
+      data: { ruleId: 'rule-1', serverId: 'server-1', status: 'OPEN' },
+    });
   });
 
   it('does not create a duplicate alert if one is already OPEN for the same rule and server', async () => {
