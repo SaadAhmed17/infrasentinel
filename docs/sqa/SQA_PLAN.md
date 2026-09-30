@@ -80,7 +80,7 @@ flowchart LR
 flowchart TB
   M["Model validation — evaluation harness (1)<br/>precision / recall / FPR on labelled scenarios"]
   I["Integration & scenario — 287 API tests + 6 RAG pgvector tests<br/>real Postgres, real HTTP pipeline, frozen clock"]
-  U["Unit — 35 API + 70 Python tests<br/>guards, clients, parsers, pre-processing, model"]
+  U["Unit — 35 API + 71 Python tests<br/>guards, clients, parsers, pre-processing, model"]
   S["Static — ESLint (type-aware), tsc, ruff, route-policy scan, dependency audit"]
   M --- I --- U --- S
 ```

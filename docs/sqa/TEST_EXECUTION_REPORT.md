@@ -30,8 +30,8 @@
 | API integration — tenant isolation | ″ | 25 | 22 | 3 | 0 | |
 | API integration — smoke | ″ | 2 | 2 | 0 | 0 | 27 s total |
 | Agent | `cd apps/agent && pytest` | 29 | 25 | 4 | 0 | 1 s |
-| AI service (ML, RAG, API) | `cd apps/ai-service && pytest` | 47 | 42 | 5 | 0 | 20 s |
-| **Total** | | **398** | **359** | **39** | **0** | ~65 s |
+| AI service (ML, RAG, API) | `cd apps/ai-service && pytest` | 48 | 42 | 6 | 0 | 30 s |
+| **Total** | | **399** | **359** | **40** | **0** | ~75 s |
 | ML evaluation harness | `python -m evaluation.evaluate_anomaly_detection` | 1 benchmark | F1 0.914 | — | — | 40 s |
 
 "Known defect" tests encode correct behaviour and currently fail because of a logged
@@ -61,9 +61,10 @@ the wrong module), which was corrected before being counted.
 
 ## Defects found this cycle
 
-40 logged ([DEFECT_LOG.md](DEFECT_LOG.md)): **2 Critical, 6 High, 19 Medium, 13 Low**;
-3 fixed on this branch (all in test/CI infrastructure). 29 product defects are
-reproduced by automated tests (39 known-defect tests; some defects have several).
+45 logged ([DEFECT_LOG.md](DEFECT_LOG.md)): **2 Critical, 7 High, 19 Medium, 17 Low**;
+3 fixed on this branch (all in test/CI infrastructure). 30 product defects are
+reproduced by automated tests (40 known-defect tests; some defects have several).
+DEF-41..45 were found by the system test of `main` ([SYSTEM_TEST_REPORT.md](SYSTEM_TEST_REPORT.md)).
 
 ## Not executed this cycle
 

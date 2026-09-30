@@ -1,16 +1,17 @@
 # InfraSentinel — Software Quality Assurance
 
-SQA owner: Hashim Ahmad. Cycle 1 completed 2026-09-30.
+SQA owner: Hashim Ahmad. Cycle 1 completed 2026-09-30 (automated tests + a full system test of `main`).
 
 ## At a glance
 
 | | Before | After cycle 1 |
 |---|---|---|
-| Automated tests | 7 (backend only) | **398** (API, agent, ML, RAG) |
+| Automated tests | 7 (backend only) | **399** (API, agent, ML, RAG) |
 | Tests run in CI | 0 | all suites, on every PR (incl. `team-dev`) |
 | Backend statement coverage | 17.8% | 94.7% (integration) |
 | Real-database testing | none | PostgreSQL + pgvector (PGlite locally, service container in CI) |
-| Defects logged | 0 | 40 (2 Critical, 6 High, 19 Medium, 13 Low) |
+| Defects logged | 0 | 45 (2 Critical, 7 High, 19 Medium, 17 Low) |
+| System test of `main` | none | 14 scenarios on the live stack: 6 pass, 1 partial, 7 fail |
 | ML quality evidence | none | F1 0.914, FPR 3.7%, ROC-AUC 0.958 on a labelled benchmark |
 
 ## Documents
@@ -24,9 +25,11 @@ SQA owner: Hashim Ahmad. Cycle 1 completed 2026-09-30.
 | [DEFECT_LOG.md](DEFECT_LOG.md) | all defects with severity, evidence and status |
 | [SECURITY_TESTING.md](SECURITY_TESTING.md) | OWASP API Top-10 coverage, tenant isolation method, dependency audit |
 | [ML_VALIDATION.md](ML_VALIDATION.md) | how the LSTM detector is validated; results and limitations |
-| [TEST_EXECUTION_REPORT.md](TEST_EXECUTION_REPORT.md) | cycle-1 results, coverage, stability |
+| [SYSTEM_TEST_REPORT.md](SYSTEM_TEST_REPORT.md) | **what is up, what is down, what to fix** — full stack run of `main` |
+| [TEST_EXECUTION_REPORT.md](TEST_EXECUTION_REPORT.md) | cycle-1 automated results, coverage, stability |
 | [PERFORMANCE_TESTING.md](PERFORMANCE_TESTING.md) | performance plan and acceptance criteria (not yet executed) |
-| [INDUSTRY_COMPARISON.md](INDUSTRY_COMPARISON.md) | practices from Prometheus, Elastic, Wazuh, Splunk vs ours |
+| [INDUSTRY_COMPARISON.md](INDUSTRY_COMPARISON.md) | QA practices from Prometheus, Elastic, Wazuh, Splunk vs ours |
+| [WORKFLOW_BENCHMARK.md](WORKFLOW_BENCHMARK.md) | product workflows (alert lifecycle, no-data, grouping, keys, tenancy) vs Grafana, Datadog, Alertmanager, Wazuh, Elastic, Sentry |
 | [evidence/](evidence/) | generated ML evaluation results |
 
 ## Running the tests
