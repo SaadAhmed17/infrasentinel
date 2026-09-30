@@ -117,3 +117,15 @@ def test_ML_PRE_008_training_and_inference_agree_on_artifact_location(tmp_path, 
     monkeypatch.chdir(tmp_path)  # e.g. running the training script from the repo root
 
     assert os.path.abspath(preprocess.ARTIFACTS_DIR) == inference.ARTIFACTS_DIR
+
+
+@pytest.mark.xfail(strict=True, reason="DEF-43: Windows agents never send loadAverage, so every row is dropped")
+def test_ML_PRE_009_windows_server_without_load_average_can_be_trained(processed):
+    # Found in the system test: the agent omits loadAverage on Windows, and
+    # clean_and_transform() drops any row with a missing feature -> 0 rows.
+    df = normal_telemetry(200)
+    df["loadAverage"] = None
+
+    train, val, _ = processed(df)
+
+    assert len(train) > 0 and len(val) > 0
