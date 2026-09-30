@@ -251,23 +251,30 @@ describe('Tenant isolation (TENANT)', () => {
       expect(res.status).toBe(200);
     });
 
-    knownDefect(
-      'DEF-04',
-      'TENANT-021 PATCH /rules/:id cannot move a rule into another org (mass assignment)',
-      async () => {
-        const aRule = await createRule(t.prisma, A.org.id);
+    it('TENANT-021 PATCH /rules/:id cannot move a rule into another org (mass assignment)', async () => {
+      const aRule = await createRule(t.prisma, A.org.id);
 
-        await request(t.app, 'PATCH', `/rules/${aRule.id}`, {
-          token: A.tokens.SECURITY_ANALYST,
-          body: { name: 'renamed', organizationId: B.org.id },
-        });
+      await request(t.app, 'PATCH', `/rules/${aRule.id}`, {
+        token: A.tokens.SECURITY_ANALYST,
+        body: { name: 'renamed', organizationId: B.org.id },
+      });
 
-        const after = await t.prisma.rule.findUniqueOrThrow({
-          where: { id: aRule.id },
-        });
-        expect(after.organizationId).toBe(A.org.id);
-      },
-    );
+      const after = await t.prisma.rule.findUniqueOrThrow({
+        where: { id: aRule.id },
+      });
+      expect(after.organizationId).toBe(A.org.id);
+    });
+
+    it('TENANT-025 PATCH /rules/:id validates field values (invalid threshold → 400)', async () => {
+      const aRule = await createRule(t.prisma, A.org.id);
+
+      const res = await request(t.app, 'PATCH', `/rules/${aRule.id}`, {
+        token: A.tokens.SECURITY_ANALYST,
+        body: { threshold: 'lots' },
+      });
+
+      expect(res.status).toBe(400);
+    });
 
     it('TENANT-022 POST /rules ignores an organizationId in the body', async () => {
       const res = await request<{ id: string }>(t.app, 'POST', '/rules', {

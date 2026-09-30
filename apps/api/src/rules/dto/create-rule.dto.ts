@@ -1,4 +1,12 @@
-import { IsEnum, IsNumber, IsString, IsOptional, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsNumber,
+  IsString,
+  IsOptional,
+  Max,
+  Min,
+} from 'class-validator';
 import {
   RuleType,
   MetricField,
@@ -49,6 +57,23 @@ export class CreateRuleDto {
   @IsNumber()
   @Min(1)
   windowSeconds?: number;
+
+  // Unusual-access fields (optional — only used when ruleType = UNUSUAL_ACCESS)
+  @IsOptional()
+  @IsString()
+  approvedUsernames?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(23)
+  businessHourStartUTC?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(23)
+  businessHourEndUTC?: number;
 
   @IsEnum(Severity)
   severity: Severity;

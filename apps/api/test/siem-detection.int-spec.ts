@@ -550,7 +550,8 @@ describe('SIEM detection engine (SIEM / INC)', () => {
       ]);
 
     beforeEach(async () => {
-      // Seeded directly: creating this configuration through the API is DEF-09.
+      // Seeded directly so each scenario controls the configuration exactly;
+      // creating it through the API is covered by SIEM-055/056.
       rule = await createRule(t.prisma, A.org.id, {
         ruleType: 'UNUSUAL_ACCESS',
         metricField: null,
@@ -619,31 +620,45 @@ describe('SIEM detection engine (SIEM / INC)', () => {
       await expect(alertsOf(rule)).resolves.toHaveLength(0);
     });
 
-    knownDefect(
-      'DEF-09',
-      'SIEM-055 an UNUSUAL_ACCESS rule created through the API keeps its configuration',
-      async () => {
-        jest.useRealTimers();
-        const res = await request<{ id: string }>(t.app, 'POST', '/rules', {
-          token: A.tokens.SECURITY_ANALYST,
-          body: {
-            name: 'sudo watch',
-            ruleType: 'UNUSUAL_ACCESS',
-            severity: 'HIGH',
-            approvedUsernames: 'saad',
-            businessHourStartUTC: 9,
-            businessHourEndUTC: 18,
-          },
-        });
-
-        const created = await t.prisma.rule.findUniqueOrThrow({
-          where: { id: res.body.id },
-        });
-        expect(created).toMatchObject({
+    it('SIEM-055 an UNUSUAL_ACCESS rule created through the API keeps its configuration', async () => {
+      jest.useRealTimers();
+      const res = await request<{ id: string }>(t.app, 'POST', '/rules', {
+        token: A.tokens.SECURITY_ANALYST,
+        body: {
+          name: 'sudo watch',
+          ruleType: 'UNUSUAL_ACCESS',
+          severity: 'HIGH',
           approvedUsernames: 'saad',
           businessHourStartUTC: 9,
           businessHourEndUTC: 18,
+        },
+      });
+
+      const created = await t.prisma.rule.findUniqueOrThrow({
+        where: { id: res.body.id },
+      });
+      expect(created).toMatchObject({
+        approvedUsernames: 'saad',
+        businessHourStartUTC: 9,
+        businessHourEndUTC: 18,
+      });
+    });
+
+    it.each([-1, 24, 9.5])(
+      'SIEM-056 a business hour of %d is rejected with 400',
+      async (hour) => {
+        jest.useRealTimers();
+        const res = await request(t.app, 'POST', '/rules', {
+          token: A.tokens.SECURITY_ANALYST,
+          body: {
+            name: 'bad hours',
+            ruleType: 'UNUSUAL_ACCESS',
+            severity: 'HIGH',
+            businessHourStartUTC: hour,
+          },
         });
+
+        expect(res.status).toBe(400);
       },
     );
   });
