@@ -182,22 +182,28 @@ def query_incidents(organization_id: str, question: str, top_k: int = 5) -> dict
     )
     user_prompt = f"Incident data:\n\n{context_text}\n\nQuestion: {question}"
 
-    completion = get_groq_client().chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.2,
-    )
-
-    answer = completion.choices[0].message.content
-
     sources = [
         {"incidentId": row[0], "title": row[2], "severity": row[3],
             "status": row[4], "relevance": round(1 - row[5], 4)}
         for row in rows
     ]
+
+    try:
+        completion = get_groq_client().chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.2,
+        )
+        answer = completion.choices[0].message.content
+    except Exception as exc:  # noqa: BLE001 — a provider outage must not become an HTTP 500
+        print(f"LLM provider error: {exc}")
+        answer = (
+            "The AI assistant is temporarily unavailable (the language model could not be reached). "
+            "The most relevant incidents are listed below."
+        )
 
     return {"answer": answer, "sources": sources}
 

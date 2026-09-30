@@ -40,6 +40,15 @@ describe('RagService (AI service client)', () => {
     );
   });
 
+  it('an unreachable AI service becomes a 503 with a clear message', async () => {
+    fetchSpy.mockRejectedValue(new TypeError('fetch failed'));
+
+    await expect(service.query('org-A', 'q?')).rejects.toMatchObject({
+      status: 503,
+      message: expect.stringContaining('temporarily unavailable') as unknown,
+    });
+  });
+
   it('reindex is scoped to the given organization', async () => {
     fetchSpy.mockResolvedValue(Response.json({ indexed: 3 }));
 

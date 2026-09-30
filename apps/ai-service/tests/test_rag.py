@@ -119,7 +119,6 @@ def test_RAG_U06_incident_summary_includes_alert_evidence():
     assert "Alert from rule 'brute force': " in summary
 
 
-@pytest.mark.xfail(strict=True, reason="DEF-27: an LLM provider outage surfaces as an unhandled 500")
 def test_RAG_U07_llm_provider_outage_returns_a_graceful_answer(db, fake_llm):
     db([row("i1", "cpu spike")], [])
     fake_llm.error = ConnectionError("Groq unavailable")

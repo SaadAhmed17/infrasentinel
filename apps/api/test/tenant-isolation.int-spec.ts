@@ -208,20 +208,27 @@ describe('Tenant isolation (TENANT)', () => {
       expect(after.role).toBe('OWNER');
     });
 
-    knownDefect(
-      'DEF-08',
-      'TENANT-018 GET /servers/:id/anomaly-score refuses another org’s server',
-      async () => {
-        const res = await request(
-          t.app,
-          'GET',
-          `/servers/${B.server.id}/anomaly-score`,
-          { token: A.tokens.OWNER },
-        );
+    it('TENANT-018 GET /servers/:id/anomaly-score refuses another org’s server', async () => {
+      const res = await request(
+        t.app,
+        'GET',
+        `/servers/${B.server.id}/anomaly-score`,
+        { token: A.tokens.OWNER },
+      );
 
-        expect(res.status).toBe(404);
-      },
-    );
+      expect(res.status).toBe(404);
+    });
+
+    it('TENANT-026 positive control: an org can request its own server’s anomaly score', async () => {
+      const res = await request(
+        t.app,
+        'GET',
+        `/servers/${A.server.id}/anomaly-score`,
+        { token: A.tokens.VIEWER },
+      );
+
+      expect(res.status).toBe(200); // the AI service is offline in tests: an explained "unavailable" body
+    });
 
     knownDefect(
       'DEF-22',
