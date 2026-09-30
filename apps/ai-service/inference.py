@@ -2,12 +2,11 @@ import json
 import os
 import pickle
 
-import numpy as np
 import torch
 
 from data_pipeline import FEATURE_COLUMNS, load_metrics_for_server
 from model import LSTMAutoencoder
-from preprocess import SKEWED_COLUMNS, WINDOW_SIZE
+from preprocess import WINDOW_SIZE, clean_and_transform
 
 ARTIFACTS_DIR = os.path.join(os.path.dirname(
     os.path.abspath(__file__)), "artifacts")
@@ -54,17 +53,13 @@ def score_server(server_id: str):
     if artifacts is None:
         return {"error": f"No trained model exists for server {server_id}"}
 
-    df = load_metrics_for_server(server_id)
-    df = df.dropna(subset=FEATURE_COLUMNS).reset_index(drop=True)
+    # Exactly the same cleaning as training (incl. never-reported features).
+    df = clean_and_transform(load_metrics_for_server(server_id))
 
     if len(df) < WINDOW_SIZE:
         return {"error": f"Not enough recent data — need {WINDOW_SIZE} readings, have {len(df)}"}
 
-    recent_window = df.tail(WINDOW_SIZE).copy()
-
-    for col in SKEWED_COLUMNS:
-        recent_window[col] = np.log1p(recent_window[col])
-
+    recent_window = df.tail(WINDOW_SIZE)
     scaled = artifacts["scaler"].transform(recent_window[FEATURE_COLUMNS])
     sequence = torch.tensor(scaled, dtype=torch.float32).unsqueeze(
         0)  # add batch dimension: (1, 20, 9)

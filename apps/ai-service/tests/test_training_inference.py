@@ -68,7 +68,6 @@ def test_ML_TRN_002_threshold_is_the_95th_percentile_of_validation_error(trained
     assert artifacts["config"]["anomaly_threshold"] == pytest.approx(np.percentile(errors, 95), rel=1e-5)
 
 
-@pytest.mark.xfail(strict=True, reason="DEF-28: too little history crashes training instead of a clear error")
 def test_ML_TRN_003_too_little_history_fails_with_a_clear_message(tmp_path, monkeypatch):
     monkeypatch.setattr(preprocess, "ARTIFACTS_DIR", str(tmp_path))
     monkeypatch.setattr(train, "ARTIFACTS_DIR", str(tmp_path))
@@ -77,6 +76,37 @@ def test_ML_TRN_003_too_little_history_fails_with_a_clear_message(tmp_path, monk
 
     with pytest.raises(ValueError, match="(?i)not enough"):
         train.train_one_server("tiny")
+
+
+def test_ML_TRN_004_one_untrainable_server_does_not_stop_the_others(tmp_path, monkeypatch):
+    monkeypatch.setattr(preprocess, "ARTIFACTS_DIR", str(tmp_path))
+    monkeypatch.setattr(train, "ARTIFACTS_DIR", str(tmp_path))
+    monkeypatch.setattr(train, "EPOCHS", 2)
+    preprocess.process_server("tiny", normal_telemetry(60))
+    preprocess.process_server("healthy", normal_telemetry(300))
+
+    failures = train.train_all_servers()
+
+    assert list(failures) == ["tiny"]
+    assert (tmp_path / "healthy" / "model.pt").exists()
+
+
+def test_ML_INF_007_windows_server_is_trained_and_scored_end_to_end(tmp_path, monkeypatch):
+    """DEF-43 regression: a host that never reports loadAverage works through
+    pre-processing, training and live scoring."""
+    history = normal_telemetry(300, seed=4)
+    history["loadAverage"] = None
+    for module in (preprocess, train, inference):
+        monkeypatch.setattr(module, "ARTIFACTS_DIR", str(tmp_path))
+    monkeypatch.setattr(train, "EPOCHS", 3)
+    monkeypatch.setattr(inference, "_model_cache", {})
+    preprocess.process_server("win-host", history)
+    train.train_one_server("win-host")
+    monkeypatch.setattr(inference, "load_metrics_for_server", lambda _id: history.copy())
+
+    result = inference.score_server("win-host")
+
+    assert "reconstructionError" in result and result["windowSize"] == 20
 
 
 def test_ML_INF_001_server_without_a_model_gets_an_explanatory_error(scoring):

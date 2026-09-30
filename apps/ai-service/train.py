@@ -8,7 +8,8 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from model import LSTMAutoencoder
 
-ARTIFACTS_DIR = "artifacts"
+# Absolute, so training reads/writes where inference.py looks, whatever the working directory.
+ARTIFACTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "artifacts")
 WINDOW_SIZE = 20
 NUM_FEATURES = 9
 HIDDEN_SIZE = 32
@@ -31,6 +32,11 @@ def train_one_server(server_id: str):
     print(f"{'='*60}")
 
     train_seq, val_seq = load_server_sequences(server_id)
+    if len(train_seq) == 0 or len(val_seq) == 0:
+        raise ValueError(
+            f"Not enough history to train server {server_id}: {len(train_seq)} training and "
+            f"{len(val_seq)} validation windows (need at least one of each) — collect more data first"
+        )
 
     train_tensor = torch.tensor(train_seq, dtype=torch.float32)
     val_tensor = torch.tensor(val_seq, dtype=torch.float32)
@@ -113,10 +119,22 @@ def train_one_server(server_id: str):
     print(f"Saved model and config to {server_dir}/")
 
 
-if __name__ == "__main__":
+def train_all_servers() -> dict:
+    """Train every pre-processed server; one server's failure must not stop the others.
+    Returns {server_id: error message} for the servers that failed."""
+    failures = {}
     server_ids = [
         d for d in os.listdir(ARTIFACTS_DIR)
         if os.path.isdir(os.path.join(ARTIFACTS_DIR, d))
     ]
     for server_id in server_ids:
-        train_one_server(server_id)
+        try:
+            train_one_server(server_id)
+        except Exception as exc:  # noqa: BLE001 — report and continue with the next server
+            failures[server_id] = str(exc)
+            print(f"Skipped server {server_id}: {exc}")
+    return failures
+
+
+if __name__ == "__main__":
+    train_all_servers()

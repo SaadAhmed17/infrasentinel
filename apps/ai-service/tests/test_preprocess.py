@@ -108,24 +108,43 @@ def test_ML_PRE_007_preprocessing_is_deterministic(processed):
     np.testing.assert_array_equal(first[1], second[1])
 
 
-@pytest.mark.xfail(strict=True, reason="DEF-37: training writes artifacts relative to the working directory")
 def test_ML_PRE_008_training_and_inference_agree_on_artifact_location(tmp_path, monkeypatch):
     import os
 
     import inference
+    import train
 
     monkeypatch.chdir(tmp_path)  # e.g. running the training script from the repo root
 
     assert os.path.abspath(preprocess.ARTIFACTS_DIR) == inference.ARTIFACTS_DIR
+    assert os.path.abspath(train.ARTIFACTS_DIR) == inference.ARTIFACTS_DIR
 
 
-@pytest.mark.xfail(strict=True, reason="DEF-43: Windows agents never send loadAverage, so every row is dropped")
 def test_ML_PRE_009_windows_server_without_load_average_can_be_trained(processed):
-    # Found in the system test: the agent omits loadAverage on Windows, and
-    # clean_and_transform() drops any row with a missing feature -> 0 rows.
+    # Found in the system test (DEF-43): the agent omits loadAverage on Windows,
+    # and dropping every row with a missing feature left 0 rows.
     df = normal_telemetry(200)
     df["loadAverage"] = None
 
     train, val, _ = processed(df)
 
     assert len(train) > 0 and len(val) > 0
+
+
+def test_ML_PRE_010_occasional_missing_values_are_still_dropped_not_filled():
+    df = normal_telemetry(10)
+    df.loc[4, "networkIn"] = None  # e.g. the agent's first sample has no rates yet
+
+    clean = preprocess.clean_and_transform(df)
+
+    assert len(clean) == 9
+
+
+def test_ML_PRE_011_one_failing_server_does_not_stop_the_others(tmp_path, monkeypatch):
+    monkeypatch.setattr(preprocess, "ARTIFACTS_DIR", str(tmp_path))
+    broken = normal_telemetry(0)  # no rows at all -> the scaler cannot be fitted
+
+    failures = preprocess.process_all_servers({"broken": broken, "healthy": normal_telemetry(200)})
+
+    assert list(failures) == ["broken"]
+    assert (tmp_path / "healthy" / "scaler.pkl").exists()
