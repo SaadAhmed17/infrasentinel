@@ -25,7 +25,8 @@ SQA owner: Hashim Ahmad. Cycle 1 completed 2026-09-30 (automated tests + a full 
 | [DEFECT_LOG.md](DEFECT_LOG.md) | all defects with severity, evidence and status |
 | [SECURITY_TESTING.md](SECURITY_TESTING.md) | OWASP API Top-10 coverage, tenant isolation method, dependency audit |
 | [ML_VALIDATION.md](ML_VALIDATION.md) | how the LSTM detector is validated; results and limitations |
-| [SYSTEM_TEST_REPORT.md](SYSTEM_TEST_REPORT.md) | **what is up, what is down, what to fix** — full stack run of `main` |
+| [SYSTEM_TEST_REPORT.md](SYSTEM_TEST_REPORT.md) | **what is up, what is down, what to fix** — full stack run of `main`, plus re-test after fixes |
+| [FIX_VERIFICATION_REPORT.md](FIX_VERIFICATION_REPORT.md) | the 12 fix branches: what changed, proof tests, live re-test, merge notes |
 | [TEST_EXECUTION_REPORT.md](TEST_EXECUTION_REPORT.md) | cycle-1 automated results, coverage, stability |
 | [PERFORMANCE_TESTING.md](PERFORMANCE_TESTING.md) | performance plan and acceptance criteria (not yet executed) |
 | [INDUSTRY_COMPARISON.md](INDUSTRY_COMPARISON.md) | QA practices from Prometheus, Elastic, Wazuh, Splunk vs ours |

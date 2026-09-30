@@ -74,6 +74,22 @@ logged defect; 4 new defects were found only by running the full system (DEF-41.
 Each fix has a ready-made acceptance test: its known-defect test flips from "expected
 failure" to "pass" (see DEFECT_LOG.md for the test IDs).
 
+## Re-test after fixes (combined build)
+
+All fix branches merged together (`sqa/integration-check`), fresh database, same stack
+and agent. Every scenario that failed above was run again:
+
+| ID | Before | After | Evidence |
+|---|---|---|---|
+| ST-03 | ❌ silent reload | ✅ | "Invalid credentials" shown, email kept, no reload |
+| ST-06 | ❌ silent forever | ✅ | resolving set incident + alert RESOLVED; new alert and incident ~6 s later while the disk stayed at 97.7% |
+| ST-07 | ❌ config dropped | ✅ | rule saved with approved users "saad, hashim" and hours 9–18 |
+| ST-09 | ⚠️ stayed ONLINE | ✅ | both servers OFFLINE; dashboard online 0 / offline 2 |
+| ST-10 | ❌ key exposed, metric forged | ✅ | VIEWER response has no apiKey; regenerate-key and role escalation → 403 |
+| ST-11 | ❌ HTTP 500 | ✅ | "temporarily unavailable" answer with the relevant incidents as sources |
+| ST-12a | ❌ Windows untrainable | ✅ | Windows-like host (no loadAverage) trained on 320 rows and scored; a 26-row server was skipped with a clear message instead of crashing the batch |
+| ST-12c | ❌ fragmented | ❌ unchanged | DEF-17 not fixed in this batch |
+
 ## Limitations of this run
 
 - PGlite is single-process PostgreSQL; the 110 requests/s ingestion figure observed while seeding is not a performance result.
