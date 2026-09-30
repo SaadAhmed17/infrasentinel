@@ -5,13 +5,17 @@ import { EventsService } from './events.service';
 interface IncomingRequest {
   method: string;
   url: string;
+  originalUrl?: string;
   ip?: string;
   headers: Record<string, string | string[] | undefined>;
 }
 
 // Routes that poll on a timer from the dashboard — excluded so normal
 // browsing doesn't get logged as "API traffic" and skew abuse detection.
+// Agent telemetry (/agent/*) is machine traffic authenticated by API key, not
+// user API usage, so it is excluded as well.
 const EXCLUDED_PATTERNS: RegExp[] = [
+  /^\/agent\//,
   /^\/servers$/,
   /^\/servers\/[^/]+\/metrics/,
   /^\/servers\/[^/]+\/anomaly-score$/,
@@ -29,7 +33,9 @@ export class ApiUsageMiddleware implements NestMiddleware {
   ) {}
 
   use(req: IncomingRequest, res: unknown, next: () => void) {
-    const path = req.url.split('?')[0];
+    // On Fastify, middleware sees `url` relative to its mount point ("/");
+    // originalUrl keeps the full request path.
+    const path = (req.originalUrl ?? req.url).split('?')[0];
 
     if (
       req.method === 'OPTIONS' ||

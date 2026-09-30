@@ -3,10 +3,10 @@ import { JwtService } from '@nestjs/jwt';
 import { EventsService } from './events.service';
 import { ApiUsageMiddleware } from './api-usage.middleware';
 
-// NOTE for the test strategy: these unit tests PASS — the exclusion logic is
-// correct when handed a correct URL. The integration suite (LOG-002/003) shows
-// that on the real Fastify platform the middleware receives "/" as the URL, so
-// the exclusions never apply (DEF-34). Unit tests alone could not find that.
+// NOTE for the test strategy: these unit tests passed even while the bug existed:
+// the exclusion logic was correct when handed a correct URL. The integration suite
+// (LOG-002/003) showed that on real Fastify the middleware received "/", so the
+// exclusions never applied (DEF-34). Unit tests alone could not find that.
 describe('ApiUsageMiddleware (unit)', () => {
   const jwt = new JwtService({});
   let record: jest.Mock;
@@ -51,6 +51,37 @@ describe('ApiUsageMiddleware (unit)', () => {
     await run('/rules', 'OPTIONS');
 
     expect(record).not.toHaveBeenCalled();
+  });
+
+  it.each(['/agent/metrics', '/agent/log-event'])(
+    'does not log agent telemetry route %s',
+    async (url) => {
+      await run(url, 'POST');
+
+      expect(record).not.toHaveBeenCalled();
+    },
+  );
+
+  it('uses originalUrl when the platform rewrote url to the mount point', async () => {
+    const next = jest.fn();
+    middleware.use(
+      {
+        method: 'GET',
+        url: '/',
+        originalUrl: '/rules?page=2',
+        ip: '198.51.100.20',
+        headers: {},
+      },
+      {},
+      next,
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ path: '/rules' }) as unknown,
+      }),
+    );
   });
 
   it('logs other calls with method, path (query stripped) and client IP', async () => {

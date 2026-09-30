@@ -307,42 +307,28 @@ describe('Agent ingestion (AGENT / METRIC / EVENT)', () => {
       expect(log.ipAddress).not.toBe('unknown');
     });
 
-    knownDefect(
-      'DEF-34',
-      'LOG-002 the logged path is the real request path',
-      async () => {
-        await request(t.app, 'GET', '/rules', { token: org.tokens.VIEWER });
-        await settle();
+    it('LOG-002 the logged path is the real request path', async () => {
+      await request(t.app, 'GET', '/rules', { token: org.tokens.VIEWER });
+      await settle();
 
-        const [log] = await apiRequestLogs();
-        expect(log.path).toBe('/rules');
-      },
-    );
+      const [log] = await apiRequestLogs();
+      expect(log.path).toBe('/rules');
+    });
 
-    knownDefect(
-      'DEF-34',
-      'LOG-003 dashboard polling routes are excluded from abuse logging, as designed',
-      async () => {
-        await request(t.app, 'GET', '/servers', { token: org.tokens.VIEWER });
-        await request(t.app, 'GET', '/incidents', { token: org.tokens.VIEWER });
-        await settle();
+    it('LOG-003 dashboard polling routes are excluded from abuse logging, as designed', async () => {
+      await request(t.app, 'GET', '/servers', { token: org.tokens.VIEWER });
+      await request(t.app, 'GET', '/incidents', { token: org.tokens.VIEWER });
+      await settle();
 
-        await expect(apiRequestLogs()).resolves.toHaveLength(0);
-      },
-    );
+      await expect(apiRequestLogs()).resolves.toHaveLength(0);
+    });
 
-    knownDefect(
-      'DEF-10',
-      'LOG-004 agent telemetry is not logged as user API traffic',
-      async () => {
-        for (let i = 0; i < 3; i++) await pushMetric(VALID);
-        await settle();
+    it('LOG-004 agent telemetry is not logged as user API traffic', async () => {
+      for (let i = 0; i < 3; i++) await pushMetric(VALID);
+      await settle();
 
-        const posts = (await apiRequestLogs()).filter(
-          (l) => l.method === 'POST',
-        );
-        expect(posts).toHaveLength(0);
-      },
-    );
+      const posts = (await apiRequestLogs()).filter((l) => l.method === 'POST');
+      expect(posts).toHaveLength(0);
+    });
   });
 });
