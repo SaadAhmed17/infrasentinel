@@ -1,9 +1,11 @@
 import {
   Injectable,
+  ConflictException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import type { AuthenticatedUser } from '../auth/types/authenticated-user.type';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { Role } from '@prisma/client';
@@ -36,15 +38,33 @@ export class OrganizationsService {
   }
 
   async updateMemberRole(
-    organizationId: string,
+    actor: AuthenticatedUser,
     targetUserId: string,
     newRole: Role,
   ) {
+    const { organizationId } = actor;
     const targetUser = await this.prisma.user.findFirst({
       where: { id: targetUserId, organizationId },
     });
     if (!targetUser)
       throw new NotFoundException('User not found in this organization');
+
+    // Only an owner may grant the OWNER role or change an owner's role.
+    if (newRole === 'OWNER' || targetUser.role === 'OWNER') {
+      await this.assertIsOwner(actor);
+    }
+
+    // An organization must always keep at least one owner.
+    if (targetUser.role === 'OWNER' && newRole !== 'OWNER') {
+      const owners = await this.prisma.user.count({
+        where: { organizationId, role: 'OWNER' },
+      });
+      if (owners <= 1) {
+        throw new ConflictException(
+          'An organization must keep at least one owner',
+        );
+      }
+    }
 
     return this.prisma.user.update({
       where: { id: targetUserId },
@@ -53,7 +73,26 @@ export class OrganizationsService {
     });
   }
 
-  async createInvitation(organizationId: string, dto: CreateInvitationDto) {
+  // Checks the caller's CURRENT role in the database rather than the role in
+  // their token, which may be up to 15 minutes old after a demotion.
+  private async assertIsOwner(actor: AuthenticatedUser) {
+    const current = await this.prisma.user.findFirst({
+      where: { id: actor.userId, organizationId: actor.organizationId },
+      select: { role: true },
+    });
+    if (current?.role !== 'OWNER') {
+      throw new ForbiddenException(
+        'Only an owner can grant or change the owner role',
+      );
+    }
+  }
+
+  async createInvitation(actor: AuthenticatedUser, dto: CreateInvitationDto) {
+    const { organizationId } = actor;
+    if (dto.role === 'OWNER') {
+      await this.assertIsOwner(actor);
+    }
+
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });

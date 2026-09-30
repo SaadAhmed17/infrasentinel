@@ -8,7 +8,6 @@ import {
   resetDatabase,
   Tenant,
 } from './helpers/factory';
-import { knownDefect } from './helpers/known-defect';
 import {
   createTestApp,
   HttpMethod,
@@ -236,91 +235,98 @@ describe('Role-based access control (RBAC)', () => {
       expect(after.role).toBe('ADMIN');
     });
 
-    knownDefect(
-      'DEF-03',
-      'RBAC-011 ADMIN cannot promote another member to OWNER',
-      async () => {
-        const res = await setRole(
-          org.tokens.ADMIN,
-          org.users.VIEWER.id,
-          'OWNER',
-        );
+    it('RBAC-011 ADMIN cannot promote another member to OWNER', async () => {
+      const res = await setRole(org.tokens.ADMIN, org.users.VIEWER.id, 'OWNER');
 
-        expect(res.status).toBe(403);
-      },
-    );
+      expect(res.status).toBe(403);
+    });
 
-    knownDefect(
-      'DEF-03',
-      'RBAC-012 ADMIN cannot promote themselves to OWNER',
-      async () => {
-        const res = await setRole(
-          org.tokens.ADMIN,
-          org.users.ADMIN.id,
-          'OWNER',
-        );
+    it('RBAC-012 ADMIN cannot promote themselves to OWNER', async () => {
+      const res = await setRole(org.tokens.ADMIN, org.users.ADMIN.id, 'OWNER');
 
-        expect(res.status).toBe(403);
-      },
-    );
+      expect(res.status).toBe(403);
+    });
 
-    knownDefect(
-      'DEF-03',
-      'RBAC-013 ADMIN cannot demote the OWNER',
-      async () => {
-        const res = await setRole(
-          org.tokens.ADMIN,
-          org.users.OWNER.id,
-          'VIEWER',
-        );
+    it('RBAC-013 ADMIN cannot demote the OWNER', async () => {
+      const res = await setRole(org.tokens.ADMIN, org.users.OWNER.id, 'VIEWER');
 
-        expect(res.status).toBe(403);
-        const owner = await t.prisma.user.findUniqueOrThrow({
-          where: { id: org.users.OWNER.id },
-        });
-        expect(owner.role).toBe('OWNER');
-      },
-    );
+      expect(res.status).toBe(403);
+      const owner = await t.prisma.user.findUniqueOrThrow({
+        where: { id: org.users.OWNER.id },
+      });
+      expect(owner.role).toBe('OWNER');
+    });
 
-    knownDefect(
-      'DEF-03',
-      'RBAC-014 ADMIN cannot issue an invitation carrying the OWNER role',
-      async () => {
-        const res = await request(t.app, 'POST', '/organizations/invitations', {
-          token: org.tokens.ADMIN,
-          body: { email: 'future.owner@example.com', role: 'OWNER' },
-        });
+    it('RBAC-014 ADMIN cannot issue an invitation carrying the OWNER role', async () => {
+      const res = await request(t.app, 'POST', '/organizations/invitations', {
+        token: org.tokens.ADMIN,
+        body: { email: 'future.owner@example.com', role: 'OWNER' },
+      });
 
-        expect(res.status).toBe(403);
-      },
-    );
+      expect(res.status).toBe(403);
+    });
 
-    knownDefect(
-      'DEF-03',
-      'RBAC-015 the last OWNER cannot demote themselves (org would have no owner)',
-      async () => {
-        const res = await setRole(
-          org.tokens.OWNER,
-          org.users.OWNER.id,
-          'VIEWER',
-        );
+    it('RBAC-015 the last OWNER cannot demote themselves (org would have no owner)', async () => {
+      const res = await setRole(org.tokens.OWNER, org.users.OWNER.id, 'VIEWER');
 
-        expect([400, 403, 409]).toContain(res.status);
-      },
-    );
+      expect([400, 403, 409]).toContain(res.status);
+    });
 
-    knownDefect(
-      'DEF-20',
-      'RBAC-016 an unknown role value is rejected with 400',
-      async () => {
-        const res = await setRole(
-          org.tokens.OWNER,
-          org.users.VIEWER.id,
-          'SUPERUSER',
-        );
+    it('RBAC-016 an unknown role value is rejected with 400', async () => {
+      const res = await setRole(
+        org.tokens.OWNER,
+        org.users.VIEWER.id,
+        'SUPERUSER',
+      );
 
-        expect(res.status).toBe(400);
-      },
-    );
+      expect(res.status).toBe(400);
+    });
+
+    // Positive controls: the hierarchy rules must not block legitimate owners.
+    it('RBAC-017 an OWNER can make another member a co-owner', async () => {
+      const res = await setRole(org.tokens.OWNER, org.users.ADMIN.id, 'OWNER');
+
+      expect(res.status).toBe(200);
+    });
+
+    it('RBAC-018 with two owners, one owner may step down', async () => {
+      await setRole(org.tokens.OWNER, org.users.ADMIN.id, 'OWNER');
+
+      const res = await setRole(org.tokens.OWNER, org.users.OWNER.id, 'ADMIN');
+
+      expect(res.status).toBe(200);
+    });
+
+    it('RBAC-019 an OWNER can issue an invitation carrying the OWNER role', async () => {
+      const res = await request(t.app, 'POST', '/organizations/invitations', {
+        token: org.tokens.OWNER,
+        body: { email: 'co.owner@example.com', role: 'OWNER' },
+      });
+
+      expect(res.status).toBe(201);
+    });
+
+    it('RBAC-020 an ADMIN still manages non-owner roles', async () => {
+      const res = await setRole(
+        org.tokens.ADMIN,
+        org.users.VIEWER.id,
+        'SECURITY_ANALYST',
+      );
+
+      expect(res.status).toBe(200);
+    });
+
+    it('RBAC-021 a demoted owner cannot use their stale OWNER token to grant OWNER', async () => {
+      const staleOwnerToken = org.tokens.OWNER;
+      await setRole(org.tokens.OWNER, org.users.ADMIN.id, 'OWNER'); // a second owner exists
+      await t.prisma.user.update({
+        where: { id: org.users.OWNER.id },
+        data: { role: 'ADMIN' },
+      });
+
+      const res = await setRole(staleOwnerToken, org.users.VIEWER.id, 'OWNER');
+
+      expect(res.status).toBe(403);
+    });
   });
 });
