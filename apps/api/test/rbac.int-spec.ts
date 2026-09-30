@@ -63,6 +63,11 @@ const MATRIX: Endpoint[] = [
     path: (_, i) => `/servers/${i.serverId}`,
     allowed: MANAGE_SERVERS,
   },
+  {
+    method: 'POST',
+    path: (_, i) => `/servers/${i.serverId}/regenerate-key`,
+    allowed: MANAGE_SERVERS,
+  },
   { method: 'GET', path: () => '/rules', allowed: 'ALL' },
   {
     method: 'POST',

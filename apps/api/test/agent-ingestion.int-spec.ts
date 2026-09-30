@@ -79,15 +79,11 @@ describe('Agent ingestion (AGENT / METRIC / EVENT)', () => {
       await expect(t.prisma.metric.count()).resolves.toBe(0);
     });
 
-    knownDefect(
-      'DEF-21',
-      'AGENT-005 an invalid key is rejected with 401 (not 404)',
-      async () => {
-        const res = await pushMetric(VALID, 'isk_totally_made_up');
+    it('AGENT-005 an invalid key is rejected with 401 (not 404)', async () => {
+      const res = await pushMetric(VALID, 'isk_totally_made_up');
 
-        expect(res.status).toBe(401);
-      },
-    );
+      expect(res.status).toBe(401);
+    });
   });
 
   describe('metric validation — boundary value analysis on percentages', () => {
@@ -245,22 +241,65 @@ describe('Agent ingestion (AGENT / METRIC / EVENT)', () => {
       expect(JSON.stringify(res.body)).not.toContain(org.server.apiKey);
     });
 
-    knownDefect(
-      'DEF-07',
-      'AGENT-011 the metrics endpoint does not expose the agent API key to a VIEWER',
-      async () => {
-        const res = await request(
-          t.app,
-          'GET',
-          `/servers/${org.server.id}/metrics`,
-          {
-            token: org.tokens.VIEWER,
-          },
-        );
+    it('AGENT-011 the metrics endpoint does not expose the agent API key to a VIEWER', async () => {
+      const res = await request(
+        t.app,
+        'GET',
+        `/servers/${org.server.id}/metrics`,
+        {
+          token: org.tokens.VIEWER,
+        },
+      );
 
-        expect(JSON.stringify(res.body)).not.toContain(org.server.apiKey);
-      },
-    );
+      expect(JSON.stringify(res.body)).not.toContain(org.server.apiKey);
+    });
+
+    it('AGENT-012 renaming a server does not return its API key', async () => {
+      const res = await request(t.app, 'PATCH', `/servers/${org.server.id}`, {
+        token: org.tokens.DEVOPS_ENGINEER,
+        body: { name: 'renamed-box' },
+      });
+
+      expect(res.status).toBe(200);
+      expect(JSON.stringify(res.body)).not.toContain(org.server.apiKey);
+    });
+
+    it('AGENT-013 a regenerated key works and the old key is revoked immediately', async () => {
+      const res = await request<{ apiKey: string }>(
+        t.app,
+        'POST',
+        `/servers/${org.server.id}/regenerate-key`,
+        { token: org.tokens.ADMIN },
+      );
+
+      expect(res.status).toBe(201);
+      expect(res.body.apiKey).toMatch(/^isk_[0-9a-f]{48}$/);
+      expect((await pushMetric(VALID, res.body.apiKey)).status).toBe(201);
+      expect((await pushMetric(VALID, org.server.apiKey)).status).toBe(401);
+    });
+
+    it('AGENT-014 another organization cannot regenerate this server’s key', async () => {
+      const other = await createTenant(t.prisma, 'Other');
+
+      const res = await request(
+        t.app,
+        'POST',
+        `/servers/${org.server.id}/regenerate-key`,
+        { token: other.tokens.OWNER },
+      );
+
+      expect(res.status).toBe(404);
+      expect((await pushMetric(VALID)).status).toBe(201); // old key still valid
+    });
+
+    it('AGENT-015 renaming a server to an invalid name is rejected with 400', async () => {
+      const res = await request(t.app, 'PATCH', `/servers/${org.server.id}`, {
+        token: org.tokens.OWNER,
+        body: { name: 42 },
+      });
+
+      expect(res.status).toBe(400);
+    });
 
     knownDefect(
       'DEF-14',

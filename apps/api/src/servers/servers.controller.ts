@@ -15,6 +15,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { CreateServerDto } from './dto/create-server.dto';
+import { UpdateServerDto } from './dto/update-server.dto';
 import type { AuthenticatedUser } from '../auth/types/authenticated-user.type';
 
 @Controller('servers')
@@ -55,9 +56,19 @@ export class ServersController {
   updateServer(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
-    @Body('name') name: string,
+    @Body() dto: UpdateServerDto,
   ) {
-    return this.serversService.updateServer(user.organizationId, id, name);
+    return this.serversService.updateServer(user.organizationId, id, dto.name);
+  }
+
+  @Post(':id/regenerate-key')
+  @UseGuards(RolesGuard)
+  @Roles('OWNER', 'ADMIN', 'DEVOPS_ENGINEER')
+  regenerateApiKey(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.serversService.regenerateApiKey(user.organizationId, id);
   }
 
   @Delete(':id')
