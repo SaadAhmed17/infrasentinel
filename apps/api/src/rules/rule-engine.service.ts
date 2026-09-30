@@ -342,7 +342,10 @@ export class RuleEngineService {
       where: {
         eventType: { in: ['AUTH_LOGIN_FAILURE', 'AUTH_LOGIN_SUCCESS'] },
         createdAt: { gte: windowStart },
-        OR: [{ organizationId: rule.organizationId }, { organizationId: null }],
+        // Only this tenant's events. Events with no organization (failed logins
+        // for unknown e-mails, unauthenticated traffic) cannot be attributed to
+        // a tenant, so they must not raise alerts — or leak details — everywhere.
+        organizationId: rule.organizationId,
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -468,7 +471,7 @@ export class RuleEngineService {
       where: {
         eventType: rule.eventType,
         createdAt: { gte: windowStart },
-        OR: [{ organizationId: rule.organizationId }, { organizationId: null }],
+        organizationId: rule.organizationId, // tenant's own events only
       },
     });
 
@@ -540,7 +543,7 @@ export class RuleEngineService {
       where: {
         eventType: 'SUDO_COMMAND',
         createdAt: { gte: windowStart },
-        OR: [{ organizationId: rule.organizationId }, { organizationId: null }],
+        organizationId: rule.organizationId, // tenant's own events only
       },
     });
 

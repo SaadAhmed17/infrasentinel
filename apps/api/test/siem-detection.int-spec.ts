@@ -421,29 +421,25 @@ describe('SIEM detection engine (SIEM / INC)', () => {
       await expect(alertsOf(rule)).resolves.toHaveLength(0);
     });
 
-    knownDefect(
-      'DEF-05',
-      'SIEM-035 events with no organization do not raise alerts in every tenant',
-      async () => {
-        const bRule = await createRule(t.prisma, B.org.id, {
-          ruleType: 'EVENT_FREQUENCY',
-          metricField: null,
-          operator: null,
-          threshold: null,
-          eventType: 'AUTH_LOGIN_FAILURE',
-          groupByField: 'ipAddress',
-          maxCount: 5,
-          windowSeconds: 300,
-        });
-        // e.g. failed logins against e-mail addresses that belong to no tenant
-        await failures(null, '203.0.113.66', [10, 20, 30, 40, 50]);
+    it('SIEM-035 events with no organization do not raise alerts in every tenant', async () => {
+      const bRule = await createRule(t.prisma, B.org.id, {
+        ruleType: 'EVENT_FREQUENCY',
+        metricField: null,
+        operator: null,
+        threshold: null,
+        eventType: 'AUTH_LOGIN_FAILURE',
+        groupByField: 'ipAddress',
+        maxCount: 5,
+        windowSeconds: 300,
+      });
+      // e.g. failed logins against e-mail addresses that belong to no tenant
+      await failures(null, '203.0.113.66', [10, 20, 30, 40, 50]);
 
-        await engine.evaluateRules();
+      await engine.evaluateRules();
 
-        const leaked = [...(await alertsOf(rule)), ...(await alertsOf(bRule))];
-        expect(leaked).toHaveLength(0);
-      },
-    );
+      const leaked = [...(await alertsOf(rule)), ...(await alertsOf(bRule))];
+      expect(leaked).toHaveLength(0);
+    });
   });
 
   describe('CREDENTIAL_STUFFING (≥3 distinct IPs fail, then a success, within 600s)', () => {
