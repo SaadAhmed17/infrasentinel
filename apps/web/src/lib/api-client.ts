@@ -39,8 +39,12 @@ async function apiFetch<T>(path: string, options: RequestInit = {}, isRetry = fa
     },
   });
 
+  // A 401 from the auth endpoints themselves (wrong password, invalid invitation)
+  // is an error to show the user, not an expired session to refresh.
+  const isAuthRequest = path.startsWith('/auth/');
+
   // If unauthorized and we haven't already retried, try refreshing once, then retry the original request
-  if (res.status === 401 && !isRetry) {
+  if (res.status === 401 && !isRetry && !isAuthRequest) {
     const newToken = await refreshAccessToken();
     if (newToken) {
       return apiFetch<T>(path, options, true);
@@ -53,8 +57,10 @@ async function apiFetch<T>(path: string, options: RequestInit = {}, isRetry = fa
   }
 
   if (!res.ok) {
-    const errorBody: ApiError = await res.json();
-    throw new Error(Array.isArray(errorBody.message) ? errorBody.message.join(', ') : errorBody.message);
+    // Not every error response is JSON (e.g. a proxy's HTML error page).
+    const errorBody: Partial<ApiError> = await res.json().catch(() => ({}));
+    const message = errorBody.message ?? `Request failed (${res.status} ${res.statusText})`;
+    throw new Error(Array.isArray(message) ? message.join(', ') : message);
   }
 
   return res.json();
