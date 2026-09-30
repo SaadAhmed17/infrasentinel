@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { IncidentStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -59,14 +60,28 @@ export class IncidentsService {
   async updateIncidentStatus(
     organizationId: string,
     incidentId: string,
-    status: string,
+    status: IncidentStatus,
   ) {
-    return this.prisma.incident.updateMany({
+    const incident = await this.prisma.incident.findFirst({
       where: { id: incidentId, organizationId },
-      data: {
-        status: status as 'OPEN' | 'INVESTIGATING' | 'RESOLVED',
-        resolvedAt: status === 'RESOLVED' ? new Date() : null,
-      },
+    });
+    if (!incident) throw new NotFoundException('Incident not found');
+
+    const resolved = status === 'RESOLVED';
+    return this.prisma.$transaction(async (tx) => {
+      // Resolving the incident resolves its alerts too. Alert de-duplication
+      // only blocks while an alert is OPEN, so once the problem is handled a
+      // recurrence raises a fresh alert instead of being suppressed forever.
+      if (resolved) {
+        await tx.alert.updateMany({
+          where: { incidentId, status: { not: 'RESOLVED' } },
+          data: { status: 'RESOLVED' },
+        });
+      }
+      return tx.incident.update({
+        where: { id: incidentId },
+        data: { status, resolvedAt: resolved ? new Date() : null },
+      });
     });
   }
 }

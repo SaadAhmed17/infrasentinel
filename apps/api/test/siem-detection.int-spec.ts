@@ -252,32 +252,28 @@ describe('SIEM detection engine (SIEM / INC)', () => {
       },
     );
 
-    knownDefect(
-      'DEF-06',
-      'SIEM-012 after the incident is resolved, a new breach raises a new alert',
-      async () => {
-        await seedMetrics(A.server.id, breachFor([40, 20]));
-        await engine.evaluateRules();
-        await engine.correlateAlertsIntoIncidents();
-        const incident = await t.prisma.incident.findFirstOrThrow();
-        const resolved = await request(
-          t.app,
-          'PATCH',
-          `/incidents/${incident.id}/status`,
-          {
-            token: A.tokens.SECURITY_ANALYST,
-            body: { status: 'RESOLVED' },
-          },
-        );
-        expect(resolved.status).toBe(200);
+    it('SIEM-012 after the incident is resolved, a new breach raises a new alert', async () => {
+      await seedMetrics(A.server.id, breachFor([40, 20]));
+      await engine.evaluateRules();
+      await engine.correlateAlertsIntoIncidents();
+      const incident = await t.prisma.incident.findFirstOrThrow();
+      const resolved = await request(
+        t.app,
+        'PATCH',
+        `/incidents/${incident.id}/status`,
+        {
+          token: A.tokens.SECURITY_ANALYST,
+          body: { status: 'RESOLVED' },
+        },
+      );
+      expect(resolved.status).toBe(200);
 
-        freezeClockAt('2026-09-02T12:00:00.000Z'); // the next day, a new breach
-        await seedMetrics(A.server.id, breachFor([40, 20]));
-        await engine.evaluateRules();
+      freezeClockAt('2026-09-02T12:00:00.000Z'); // the next day, a new breach
+      await seedMetrics(A.server.id, breachFor([40, 20]));
+      await engine.evaluateRules();
 
-        await expect(alertsOf(rule)).resolves.toHaveLength(2);
-      },
-    );
+      await expect(alertsOf(rule)).resolves.toHaveLength(2);
+    });
   });
 
   describe('HEARTBEAT_MISSING (silent for more than 120s)', () => {
@@ -839,25 +835,40 @@ describe('SIEM detection engine (SIEM / INC)', () => {
       expect(incident.resolvedAt).toBeInstanceOf(Date);
     });
 
-    knownDefect(
-      'DEF-20',
-      'INC-011 an unknown status value is rejected with 400',
-      async () => {
-        const res = await setStatus('CLOSED');
+    it('INC-011 an unknown status value is rejected with 400', async () => {
+      const res = await setStatus('CLOSED');
 
-        expect(res.status).toBe(400);
-      },
-    );
+      expect(res.status).toBe(400);
+    });
 
-    knownDefect(
-      'DEF-06',
-      'INC-012 resolving an incident resolves its alerts',
-      async () => {
-        await setStatus('RESOLVED');
+    it('INC-012 resolving an incident resolves its alerts', async () => {
+      await setStatus('RESOLVED');
 
-        const alerts = await t.prisma.alert.findMany({ where: { incidentId } });
-        expect(alerts.every((a) => a.status === 'RESOLVED')).toBe(true);
-      },
-    );
+      const alerts = await t.prisma.alert.findMany({ where: { incidentId } });
+      expect(alerts.every((a) => a.status === 'RESOLVED')).toBe(true);
+    });
+
+    it('INC-013 marking an incident INVESTIGATING leaves its alerts open', async () => {
+      await setStatus('INVESTIGATING');
+
+      const alerts = await t.prisma.alert.findMany({ where: { incidentId } });
+      expect(alerts.every((a) => a.status === 'OPEN')).toBe(true);
+    });
+
+    it('INC-014 another organization gets 404 and cannot resolve the alerts', async () => {
+      const res = await request(
+        t.app,
+        'PATCH',
+        `/incidents/${incidentId}/status`,
+        {
+          token: B.tokens.SECURITY_ANALYST,
+          body: { status: 'RESOLVED' },
+        },
+      );
+
+      expect(res.status).toBe(404);
+      const alerts = await t.prisma.alert.findMany({ where: { incidentId } });
+      expect(alerts.every((a) => a.status === 'OPEN')).toBe(true);
+    });
   });
 });
