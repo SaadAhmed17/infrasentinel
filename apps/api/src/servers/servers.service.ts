@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateServerDto } from './dto/create-server.dto';
 import { IngestMetricDto } from './dto/ingest-metric.dto';
@@ -8,10 +9,26 @@ import { EventsService } from '../events/events.service';
 
 @Injectable()
 export class ServersService {
+  // Agent health (as in Wazuh): a server that has not reported for this long is
+  // shown OFFLINE until its agent sends data again (ingestMetric sets ONLINE).
+  private readonly offlineAfterSeconds = Number(
+    process.env.SERVER_OFFLINE_AFTER_SECONDS ?? 60,
+  );
+
   constructor(
     private prisma: PrismaService,
     private eventsService: EventsService,
   ) {}
+
+  @Cron(CronExpression.EVERY_30_SECONDS)
+  async markSilentServersOffline(): Promise<number> {
+    const cutoff = new Date(Date.now() - this.offlineAfterSeconds * 1000);
+    const { count } = await this.prisma.server.updateMany({
+      where: { status: 'ONLINE', lastHeartbeat: { lt: cutoff } },
+      data: { status: 'OFFLINE' },
+    });
+    return count;
+  }
 
   async createServer(organizationId: string, dto: CreateServerDto) {
     const apiKey = `isk_${crypto.randomBytes(24).toString('hex')}`;

@@ -1,3 +1,4 @@
+import { ServersService } from '../src/servers/servers.service';
 import {
   createServer,
   createTenant,
@@ -262,28 +263,60 @@ describe('Agent ingestion (AGENT / METRIC / EVENT)', () => {
       },
     );
 
-    knownDefect(
-      'DEF-14',
-      'MON-001 a server silent for an hour is not reported as online',
-      async () => {
-        await t.prisma.server.update({
+    describe('server online/offline status (scheduled sweep)', () => {
+      // The sweep normally runs every 30 s; the test harness disables timers,
+      // so each test triggers one tick explicitly.
+      const sweep = () => t.app.get(ServersService).markSilentServersOffline();
+      const lastSeen = (secondsAgo: number) =>
+        t.prisma.server.update({
           where: { id: org.server.id },
           data: {
             status: 'ONLINE',
-            lastHeartbeat: new Date(Date.now() - 3_600_000),
+            lastHeartbeat: new Date(Date.now() - secondsAgo * 1000),
           },
         });
+      const summary = async () =>
+        (
+          await request<{ servers: { online: number; offline: number } }>(
+            t.app,
+            'GET',
+            '/incidents/dashboard-summary',
+            { token: org.tokens.VIEWER },
+          )
+        ).body.servers;
 
-        const res = await request<{ servers: { online: number } }>(
-          t.app,
-          'GET',
-          '/incidents/dashboard-summary',
-          { token: org.tokens.VIEWER },
-        );
+      it('MON-001 a server silent for an hour is not reported as online', async () => {
+        await lastSeen(3600);
+        await sweep();
 
-        expect(res.body.servers.online).toBe(0);
-      },
-    );
+        expect(await summary()).toEqual({ total: 1, online: 0, offline: 1 });
+      });
+
+      it('MON-002 a server that reported 30 s ago stays online', async () => {
+        await lastSeen(30);
+        await sweep();
+
+        expect((await summary()).online).toBe(1);
+      });
+
+      it('MON-003 an offline server comes back online with its next metric', async () => {
+        await lastSeen(3600);
+        await sweep();
+
+        await pushMetric(VALID);
+
+        expect((await summary()).online).toBe(1);
+      });
+
+      it('MON-004 a server that never reported keeps status UNKNOWN', async () => {
+        await sweep();
+
+        const server = await t.prisma.server.findUniqueOrThrow({
+          where: { id: org.server.id },
+        });
+        expect(server.status).toBe('UNKNOWN');
+      });
+    });
   });
 
   describe('API request logging (feeds the API-abuse detection)', () => {
