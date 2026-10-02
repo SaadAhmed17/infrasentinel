@@ -14,11 +14,19 @@ WINDOW_SIZE = 20
 # 90% of each server's timeline used for training, last 10% held out for validation
 TRAIN_SPLIT = 0.9
 
-ARTIFACTS_DIR = "artifacts"
+# Absolute, so training writes where inference.py reads, whatever the working directory.
+ARTIFACTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "artifacts")
 
 
 def clean_and_transform(df):
     """Drop nulls, log-transform skewed columns. Returns a clean DataFrame ready for scaling."""
+    df = df.copy()
+    # A feature this server never reports (e.g. loadAverage on Windows hosts) is
+    # filled with a constant instead of discarding every row. A constant column
+    # carries no signal but keeps the model's fixed 9-feature shape.
+    never_reported = [c for c in FEATURE_COLUMNS if df[c].isna().all()]
+    if never_reported:
+        df[never_reported] = 0.0
     df = df.dropna(subset=FEATURE_COLUMNS).reset_index(drop=True)
 
     for col in SKEWED_COLUMNS:
@@ -80,7 +88,18 @@ def process_server(server_id: str, df):
     print(f"  Saved to {server_dir}/")
 
 
-if __name__ == "__main__":
-    all_data = load_all_servers()
+def process_all_servers(all_data: dict) -> dict:
+    """Pre-process every server; one server's failure must not stop the others.
+    Returns {server_id: error message} for the servers that failed."""
+    failures = {}
     for server_id, df in all_data.items():
-        process_server(server_id, df)
+        try:
+            process_server(server_id, df)
+        except Exception as exc:  # noqa: BLE001 — report and continue with the next server
+            failures[server_id] = str(exc)
+            print(f"  Skipped server {server_id}: {exc}")
+    return failures
+
+
+if __name__ == "__main__":
+    process_all_servers(load_all_servers())
