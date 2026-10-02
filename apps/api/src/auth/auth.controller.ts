@@ -11,6 +11,8 @@ import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { AcceptInvitationDto } from './dto/accept-invitation.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 interface RequestWithIp {
   ip: string;
@@ -41,6 +43,18 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   acceptInvitation(@Body() dto: AcceptInvitationDto) {
     return this.authService.acceptInvitation(dto);
+  }
+
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  forgotPassword(@Body() dto: ForgotPasswordDto, @Req() req: RequestWithIp) {
+    return this.authService.forgotPassword(dto, req.ip);
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  resetPassword(@Body() dto: ResetPasswordDto, @Req() req: RequestWithIp) {
+    return this.authService.resetPassword(dto, req.ip);
   }
 }
 // inside the AuthController class, alongside signup/login:

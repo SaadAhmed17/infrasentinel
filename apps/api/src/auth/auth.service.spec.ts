@@ -4,6 +4,7 @@ import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import { EventsService } from '../events/events.service';
+import { MailService } from '../mail/mail.service';
 import * as bcrypt from 'bcrypt';
 import { beforeEach, describe, it } from 'node:test';
 
@@ -26,6 +27,10 @@ describe('AuthService', () => {
           useValue: { signAsync: jest.fn().mockResolvedValue('fake-token') },
         },
         { provide: EventsService, useValue: { record: jest.fn() } },
+        {
+          provide: MailService,
+          useValue: { sendPasswordResetEmail: jest.fn() },
+        },
       ],
     }).compile();
 
