@@ -1,4 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { aiServiceAuthHeaders } from '../common/ai-service-auth';
 
 export interface AnomalyScoreResponse {
   serverId: string;
@@ -15,12 +17,28 @@ export class AnomalyService {
   private readonly aiServiceUrl =
     process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
+  constructor(private prisma: PrismaService) {}
+
+  // For dashboard requests: only servers that belong to the caller's organization.
+  async getAnomalyScoreForOrganization(
+    organizationId: string,
+    serverId: string,
+  ): Promise<AnomalyScoreResponse | null> {
+    const server = await this.prisma.server.findFirst({
+      where: { id: serverId, organizationId },
+      select: { id: true },
+    });
+    if (!server) throw new NotFoundException('Server not found');
+    return this.getAnomalyScore(serverId);
+  }
+
   async getAnomalyScore(
     serverId: string,
   ): Promise<AnomalyScoreResponse | null> {
     try {
       const response = await fetch(
         `${this.aiServiceUrl}/anomaly-score/${serverId}`,
+        { headers: aiServiceAuthHeaders() },
       );
       if (!response.ok) {
         this.logger.warn(
