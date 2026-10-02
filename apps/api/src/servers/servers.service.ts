@@ -1,10 +1,27 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateServerDto } from './dto/create-server.dto';
 import { IngestMetricDto } from './dto/ingest-metric.dto';
 import * as crypto from 'crypto';
 import { IngestLogEventDto } from './dto/ingest-log-event.dto';
 import { EventsService } from '../events/events.service';
+
+// Everything the dashboard needs about a server — deliberately without apiKey.
+// The key is shown exactly once, in the response that creates (or regenerates) it.
+const SERVER_PUBLIC_FIELDS = {
+  id: true,
+  name: true,
+  hostname: true,
+  status: true,
+  lastHeartbeat: true,
+  createdAt: true,
+} as const;
+
+const newApiKey = () => `isk_${crypto.randomBytes(24).toString('hex')}`;
 
 @Injectable()
 export class ServersService {
@@ -14,7 +31,7 @@ export class ServersService {
   ) {}
 
   async createServer(organizationId: string, dto: CreateServerDto) {
-    const apiKey = `isk_${crypto.randomBytes(24).toString('hex')}`;
+    const apiKey = newApiKey();
 
     return this.prisma.server.create({
       data: {
@@ -66,20 +83,14 @@ export class ServersService {
   async listServers(organizationId: string) {
     return this.prisma.server.findMany({
       where: { organizationId },
-      select: {
-        id: true,
-        name: true,
-        hostname: true,
-        status: true,
-        lastHeartbeat: true,
-        createdAt: true,
-      },
+      select: SERVER_PUBLIC_FIELDS,
     });
   }
 
   async getServerMetrics(organizationId: string, serverId: string, limit = 50) {
     const server = await this.prisma.server.findFirst({
       where: { id: serverId, organizationId },
+      select: SERVER_PUBLIC_FIELDS,
     });
     if (!server) throw new NotFoundException('Server not found');
 
@@ -98,9 +109,23 @@ export class ServersService {
     });
 
     if (!server) {
-      throw new NotFoundException('Invalid API key');
+      throw new UnauthorizedException('Invalid API key');
     }
 
     return server;
+  }
+
+  // Replaces a (possibly leaked) agent key; the old key stops working at once.
+  async regenerateApiKey(organizationId: string, serverId: string) {
+    const server = await this.prisma.server.findFirst({
+      where: { id: serverId, organizationId },
+    });
+    if (!server) throw new NotFoundException('Server not found');
+
+    return this.prisma.server.update({
+      where: { id: serverId },
+      data: { apiKey: newApiKey() },
+      select: { id: true, apiKey: true },
+    });
   }
 }
