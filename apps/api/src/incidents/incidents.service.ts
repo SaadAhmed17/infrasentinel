@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -61,12 +61,34 @@ export class IncidentsService {
     incidentId: string,
     status: string,
   ) {
-    return this.prisma.incident.updateMany({
+    const incident = await this.prisma.incident.findFirst({
+      where: { id: incidentId, organizationId },
+    });
+    if (!incident) throw new NotFoundException('Incident not found');
+
+    const result = await this.prisma.incident.updateMany({
       where: { id: incidentId, organizationId },
       data: {
         status: status as 'OPEN' | 'INVESTIGATING' | 'RESOLVED',
         resolvedAt: status === 'RESOLVED' ? new Date() : null,
       },
     });
+
+    // Cascade: resolving an incident must also resolve its underlying alerts —
+    // otherwise the rule engine's "is there already an OPEN alert?" dedup check
+    // still sees the old alert as open and silently refuses to raise a new one,
+    // even though you've told the system the problem is handled.
+    if (status === 'RESOLVED') {
+      await this.prisma.alert.updateMany({
+        where: { incidentId },
+        data: { status: 'RESOLVED' },
+      });
+    } else if (status === 'OPEN' || status === 'INVESTIGATING') {
+      await this.prisma.alert.updateMany({
+        where: { incidentId, status: 'RESOLVED' },
+        data: { status: 'OPEN' },
+      });
+    }
+    return result;
   }
 }
