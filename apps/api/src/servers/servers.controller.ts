@@ -36,6 +36,7 @@ export class ServersController {
   listServers(@CurrentUser() user: AuthenticatedUser) {
     return this.serversService.listServers(user.organizationId);
   }
+
   @Get(':id/metrics')
   getServerMetrics(
     @CurrentUser() user: AuthenticatedUser,
@@ -68,5 +69,15 @@ export class ServersController {
     @Param('id') id: string,
   ) {
     return this.serversService.deleteServer(user.organizationId, id);
+  }
+
+  @Post(':id/regenerate-key')
+  @UseGuards(RolesGuard)
+  @Roles('OWNER', 'ADMIN', 'DEVOPS_ENGINEER')
+  regenerateApiKey(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.serversService.regenerateApiKey(user.organizationId, id);
   }
 }

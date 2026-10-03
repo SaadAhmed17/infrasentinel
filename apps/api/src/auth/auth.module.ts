@@ -5,9 +5,10 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { EventsModule } from '../events/events.module';
+import { MailModule } from '../mail/mail.module';
 
 @Module({
-  imports: [PassportModule, JwtModule.register({}), EventsModule],
+  imports: [PassportModule, JwtModule.register({}), EventsModule, MailModule],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],
   exports: [JwtStrategy],

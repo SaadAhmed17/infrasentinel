@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { aiServiceAuthHeaders } from '../common/ai-service-auth';
 
 export interface RagQueryResponse {
   answer: string;
@@ -27,7 +28,10 @@ export class RagService {
   ): Promise<RagQueryResponse> {
     const response = await fetch(`${this.aiServiceUrl}/rag/query`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...aiServiceAuthHeaders(),
+      },
       body: JSON.stringify({ organizationId, question }),
     });
 
@@ -42,7 +46,10 @@ export class RagService {
   async reindex(organizationId: string): Promise<RagReindexResponse> {
     const response = await fetch(`${this.aiServiceUrl}/rag/reindex`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...aiServiceAuthHeaders(),
+      },
       body: JSON.stringify({ organizationId }),
     });
 

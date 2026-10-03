@@ -1,19 +1,42 @@
-import { Injectable, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UnauthorizedException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, User } from '@prisma/client';
 import { EventsService } from '../events/events.service';
+import { MailService } from '../mail/mail.service';
+
+const PASSWORD_RESET_TOKEN_MINUTES = 30;
+// At most one reset email per address in this period, so the endpoint can't be used to flood an inbox.
+const PASSWORD_RESET_EMAIL_COOLDOWN_MS = 60_000;
+const PASSWORD_RESET_PURPOSE = 'password-reset';
+
+type TokenUser = Pick<
+  User,
+  'id' | 'email' | 'role' | 'organizationId' | 'passwordHash'
+>;
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+  private readonly lastResetEmailAt = new Map<string, number>();
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
     private eventsService: EventsService,
+    private mailService: MailService,
   ) {}
 
   async signup(dto: SignupDto) {
@@ -45,12 +68,7 @@ export class AuthService {
       },
     );
 
-    return this.issueTokens(
-      result.user.id,
-      result.user.email,
-      result.user.role,
-      result.org.id,
-    );
+    return this.issueTokens(result.user);
   }
 
   async login(dto: LoginDto, ipAddress: string) {
@@ -91,21 +109,17 @@ export class AuthService {
       organizationId: user.organizationId,
     });
 
-    return this.issueTokens(
-      user.id,
-      user.email,
-      user.role,
-      user.organizationId,
-    );
+    return this.issueTokens(user);
   }
 
-  private async issueTokens(
-    userId: string,
-    email: string,
-    role: string,
-    organizationId: string,
-  ) {
-    const payload = { sub: userId, email, role, organizationId };
+  private async issueTokens(user: TokenUser) {
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      organizationId: user.organizationId,
+      pwv: this.passwordVersion(user.passwordHash),
+    };
 
     const accessToken = await this.jwtService.signAsync(payload, {
       secret: process.env.JWT_ACCESS_SECRET,
@@ -128,6 +142,7 @@ export class AuthService {
       email: string;
       role: string;
       organizationId: string;
+      pwv?: string;
     };
 
     try {
@@ -146,12 +161,14 @@ export class AuthService {
       throw new UnauthorizedException('User no longer exists');
     }
 
-    return this.issueTokens(
-      user.id,
-      user.email,
-      user.role,
-      user.organizationId,
-    );
+    // Sessions issued before the last password change (e.g. a reset) are no longer valid
+    if (payload.pwv !== this.passwordVersion(user.passwordHash)) {
+      throw new UnauthorizedException(
+        'Your password was changed. Please sign in again',
+      );
+    }
+
+    return this.issueTokens(user);
   }
 
   async acceptInvitation(dto: { token: string; password: string }) {
@@ -188,11 +205,134 @@ export class AuthService {
       },
     );
 
-    return this.issueTokens(
-      result.id,
-      result.email,
-      result.role,
-      result.organizationId,
+    return this.issueTokens(result);
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto, ipAddress: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    await this.eventsService.record({
+      eventType: 'AUTH_PASSWORD_RESET_REQUESTED',
+      source: 'auth-service',
+      severity: 'INFO',
+      message: user
+        ? `Password reset requested for ${dto.email}`
+        : `Password reset requested for unknown email ${dto.email}`,
+      metadata: user
+        ? { email: dto.email, ipAddress }
+        : { email: dto.email, ipAddress, reason: 'unknown_email' },
+      organizationId: user?.organizationId,
+    });
+
+    if (user && this.claimResetEmailSlot(user.email)) {
+      const token = await this.jwtService.signAsync(
+        { sub: user.id, purpose: PASSWORD_RESET_PURPOSE },
+        {
+          secret: this.passwordResetSecret(user.passwordHash),
+          expiresIn: `${PASSWORD_RESET_TOKEN_MINUTES}m`,
+        },
+      );
+      const webAppUrl = process.env.WEB_APP_URL || 'http://localhost:3000';
+      const resetLink = `${webAppUrl}/reset-password?token=${encodeURIComponent(token)}`;
+
+      // Not awaited: the response time must not reveal whether the email has an account.
+      this.mailService
+        .sendPasswordResetEmail(
+          user.email,
+          resetLink,
+          PASSWORD_RESET_TOKEN_MINUTES,
+        )
+        .catch((err) =>
+          this.logger.error(
+            `Failed to send password reset email to ${user.email}: ${err}`,
+          ),
+        );
+    }
+
+    // Same answer whether or not the account exists, so emails can't be enumerated.
+    return {
+      message:
+        'If an account exists for that email, a password reset link has been sent.',
+    };
+  }
+
+  async resetPassword(dto: ResetPasswordDto, ipAddress: string) {
+    const invalidLink = new BadRequestException(
+      'This password reset link is invalid or has expired. Please request a new one.',
     );
+
+    const claims = this.jwtService.decode<{
+      sub?: string;
+      purpose?: string;
+    } | null>(dto.token);
+    if (!claims?.sub || claims.purpose !== PASSWORD_RESET_PURPOSE) {
+      throw invalidLink;
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: claims.sub },
+    });
+    if (!user) throw invalidLink;
+
+    try {
+      await this.jwtService.verifyAsync(dto.token, {
+        secret: this.passwordResetSecret(user.passwordHash),
+      });
+    } catch {
+      throw invalidLink;
+    }
+
+    // Only succeeds if the password is still the one the link was issued for,
+    // so a link can be used once, even by two requests at the same time.
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+    const { count } = await this.prisma.user.updateMany({
+      where: { id: user.id, passwordHash: user.passwordHash },
+      data: { passwordHash },
+    });
+    if (count === 0) throw invalidLink;
+
+    await this.eventsService.record({
+      eventType: 'AUTH_PASSWORD_RESET_COMPLETED',
+      source: 'auth-service',
+      severity: 'INFO',
+      message: `Password reset completed for ${user.email}`,
+      metadata: { email: user.email, ipAddress },
+      organizationId: user.organizationId,
+    });
+
+    return {
+      message:
+        'Your password has been reset. You can now sign in with your new password.',
+    };
+  }
+
+  // A reset link is signed with a key that includes the current password hash,
+  // so it stops working as soon as the password changes (single use).
+  private passwordResetSecret(passwordHash: string) {
+    return `${process.env.JWT_ACCESS_SECRET}:${passwordHash}`;
+  }
+
+  // Short fingerprint of the password hash carried in every token; when the
+  // password changes, refresh tokens issued before the change are rejected.
+  private passwordVersion(passwordHash: string) {
+    return crypto
+      .createHmac('sha256', process.env.JWT_REFRESH_SECRET ?? '')
+      .update(passwordHash)
+      .digest('base64url')
+      .slice(0, 16);
+  }
+
+  private claimResetEmailSlot(email: string) {
+    const now = Date.now();
+    for (const [address, sentAt] of this.lastResetEmailAt) {
+      if (now - sentAt >= PASSWORD_RESET_EMAIL_COOLDOWN_MS) {
+        this.lastResetEmailAt.delete(address);
+      }
+    }
+    if (this.lastResetEmailAt.has(email)) return false;
+    this.lastResetEmailAt.set(email, now);
+    return true;
   }
 }

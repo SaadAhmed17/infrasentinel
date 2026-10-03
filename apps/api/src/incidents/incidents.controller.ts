@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Patch, UseGuards } from '@nestjs/common';
 import { IncidentsService } from './incidents.service';
+import { UpdateIncidentStatusDto } from './dto/update-incident-status.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -27,12 +28,12 @@ export class IncidentsController {
   updateStatus(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
-    @Body('status') status: string,
+    @Body() dto: UpdateIncidentStatusDto,
   ) {
     return this.incidentsService.updateIncidentStatus(
       user.organizationId,
       id,
-      status,
+      dto.status,
     );
   }
 }

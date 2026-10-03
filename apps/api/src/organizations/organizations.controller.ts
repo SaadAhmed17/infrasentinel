@@ -14,8 +14,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
+import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
 import type { AuthenticatedUser } from 'src/auth/types/authenticated-user.type';
-import { Role } from '@prisma/client';
 
 @Controller('organizations')
 @UseGuards(JwtAuthGuard)
@@ -48,9 +48,9 @@ export class OrganizationsController {
   updateMemberRole(
     @CurrentUser() user: AuthenticatedUser,
     @Param('userId') userId: string,
-    @Body('role') role: Role,
+    @Body() dto: UpdateMemberRoleDto,
   ) {
-    return this.orgService.updateMemberRole(user.organizationId, userId, role);
+    return this.orgService.updateMemberRole(user, userId, dto.role);
   }
 
   @Post('invitations')
@@ -60,7 +60,7 @@ export class OrganizationsController {
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateInvitationDto,
   ) {
-    return this.orgService.createInvitation(user.organizationId, dto);
+    return this.orgService.createInvitation(user, dto);
   }
 
   @Get('invitations')
