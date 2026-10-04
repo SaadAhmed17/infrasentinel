@@ -22,6 +22,9 @@ type CorrelatedAlert = Pick<
 export class RuleEngineService {
   private readonly logger = new Logger(RuleEngineService.name);
 
+  private evaluating = false;
+  private correlating = false;
+
   constructor(
     private prisma: PrismaService,
     private anomalyService: AnomalyService,
@@ -29,6 +32,17 @@ export class RuleEngineService {
 
   @Cron(CronExpression.EVERY_MINUTE)
   async correlateAlertsIntoIncidents() {
+    // Two overlapping runs could put the same alerts into two incidents.
+    if (this.correlating) return;
+    this.correlating = true;
+    try {
+      await this.correlateNewAlerts();
+    } finally {
+      this.correlating = false;
+    }
+  }
+
+  private async correlateNewAlerts() {
     const uncorrelatedAlerts = await this.prisma.alert.findMany({
       where: { status: 'OPEN', incidentId: null },
       include: { rule: true },
@@ -182,6 +196,23 @@ export class RuleEngineService {
 
   @Cron(CronExpression.EVERY_30_SECONDS)
   async evaluateRules() {
+    // A slow tick (e.g. a hanging AI service) must not overlap the next one:
+    // both could see "no open alert" for the same problem and raise it twice.
+    if (this.evaluating) {
+      this.logger.warn(
+        'Previous rule-engine tick is still running; skipping this one',
+      );
+      return;
+    }
+    this.evaluating = true;
+    try {
+      await this.evaluateActiveRules();
+    } finally {
+      this.evaluating = false;
+    }
+  }
+
+  private async evaluateActiveRules() {
     this.logger.debug('Rule engine tick — checking active rules');
 
     const activeMetricRules = await this.prisma.rule.findMany({
@@ -196,7 +227,7 @@ export class RuleEngineService {
     );
 
     for (const rule of activeMetricRules) {
-      await this.evaluateMetricRule(rule);
+      await this.evaluateSafely(rule, () => this.evaluateMetricRule(rule));
     }
 
     const activeEventRules = await this.prisma.rule.findMany({
@@ -211,7 +242,7 @@ export class RuleEngineService {
     );
 
     for (const rule of activeEventRules) {
-      await this.evaluateEventRule(rule);
+      await this.evaluateSafely(rule, () => this.evaluateEventRule(rule));
     }
 
     const activeHeartbeatRules = await this.prisma.rule.findMany({
@@ -226,7 +257,7 @@ export class RuleEngineService {
     );
 
     for (const rule of activeHeartbeatRules) {
-      await this.evaluateHeartbeatRule(rule);
+      await this.evaluateSafely(rule, () => this.evaluateHeartbeatRule(rule));
     }
     const activeCredStuffingRules = await this.prisma.rule.findMany({
       where: {
@@ -240,7 +271,9 @@ export class RuleEngineService {
     );
 
     for (const rule of activeCredStuffingRules) {
-      await this.evaluateCredentialStuffingRule(rule);
+      await this.evaluateSafely(rule, () =>
+        this.evaluateCredentialStuffingRule(rule),
+      );
     }
     const activeAnomalyRules = await this.prisma.rule.findMany({
       where: {
@@ -254,7 +287,21 @@ export class RuleEngineService {
     );
 
     for (const rule of activeAnomalyRules) {
-      await this.evaluateAnomalyRule(rule);
+      await this.evaluateSafely(rule, () => this.evaluateAnomalyRule(rule));
+    }
+  }
+
+  // One failing rule (bad data, a database hiccup) must not stop the others.
+  private async evaluateSafely(
+    rule: { id: string },
+    evaluate: () => Promise<void>,
+  ) {
+    try {
+      await evaluate();
+    } catch (err) {
+      this.logger.error(
+        `Rule "${rule.id}" failed and was skipped this tick: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
