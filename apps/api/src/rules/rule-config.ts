@@ -51,7 +51,7 @@ export function assertRuleIsComplete(
   );
   if (missing.length > 0) {
     throw new BadRequestException(
-      `A ${rule.ruleType} rule needs: ${missing.join(', ')}`,
+      `${rule.ruleType} rules need: ${missing.join(', ')}`,
     );
   }
 }
