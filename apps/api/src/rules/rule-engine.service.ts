@@ -2,11 +2,21 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { AnomalyService } from '../anomaly/anomaly.service';
+import { Alert, Prisma } from '@prisma/client';
 
 // Agents push a reading about every 10 s (plus a 1 s CPU sample), so a breach
 // "sustained for 60 s" may have its first reading up to ~15 s after the window
 // start.
 const SAMPLE_TOLERANCE_SECONDS = 15;
+
+// Alerts about the same server or attacker within this time of the previous
+// one join its open incident instead of opening a new one.
+const CORRELATION_WINDOW_MS = 5 * 60 * 1000;
+
+type CorrelatedAlert = Pick<
+  Alert,
+  'ruleId' | 'serverId' | 'details' | 'createdAt'
+>;
 
 @Injectable()
 export class RuleEngineService {
@@ -22,6 +32,7 @@ export class RuleEngineService {
     const uncorrelatedAlerts = await this.prisma.alert.findMany({
       where: { status: 'OPEN', incidentId: null },
       include: { rule: true },
+      orderBy: { createdAt: 'asc' },
     });
 
     if (uncorrelatedAlerts.length === 0) return;
@@ -30,51 +41,127 @@ export class RuleEngineService {
       `Correlation check: ${uncorrelatedAlerts.length} uncorrelated open alert(s)`,
     );
 
-    // Group alerts by organization (since rule.organizationId tells us which org each belongs to)
-    const byOrg = new Map<string, typeof uncorrelatedAlerts>();
+    // Group alerts by organization (never mixed) and by what they are about.
+    // Event alerts without a server are grouped by their attacker or target,
+    // not lumped together into one "no server" incident.
+    const groups = new Map<string, typeof uncorrelatedAlerts>();
     for (const alert of uncorrelatedAlerts) {
-      const orgId = alert.rule.organizationId;
-      if (!byOrg.has(orgId)) byOrg.set(orgId, []);
-      byOrg.get(orgId)!.push(alert);
+      const key = `${alert.rule.organizationId}|${this.correlationKey(alert)}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(alert);
     }
 
-    for (const [organizationId, alerts] of byOrg.entries()) {
-      // Simple correlation: group alerts from the same server within a 5-minute window into one incident
-      const bySerer = new Map<string, typeof alerts>();
-      for (const alert of alerts) {
-        const key = alert.serverId ?? 'no-server'; // event-frequency alerts have no serverId
-        if (!bySerer.has(key)) bySerer.set(key, []);
-        bySerer.get(key)!.push(alert);
-      }
+    for (const groupedAlerts of groups.values()) {
+      const organizationId = groupedAlerts[0].rule.organizationId;
+      const alertIds = groupedAlerts.map((a) => a.id);
 
-      for (const [, groupedAlerts] of bySerer.entries()) {
-        const highestSeverity = this.pickHighestSeverity(
-          groupedAlerts.map((a) => a.rule.severity),
+      // A new alert about the same server / attacker shortly after the last one
+      // belongs to the incident that is already open for it.
+      const openIncident = await this.findIncidentToJoin(
+        organizationId,
+        groupedAlerts[0],
+      );
+      if (openIncident) {
+        await this.prisma.alert.updateMany({
+          where: { id: { in: alertIds } },
+          data: { incidentId: openIncident.id },
+        });
+        const total = openIncident._count.alerts + groupedAlerts.length;
+        const baseTitle = openIncident.title.replace(
+          / \+ \d+ more alert\(s\)$/,
+          '',
         );
-        const primaryRuleName = groupedAlerts[0].rule.name;
-        const title =
-          groupedAlerts.length === 1
-            ? primaryRuleName
-            : `${primaryRuleName} + ${groupedAlerts.length - 1} more alert(s)`;
-
-        const incident = await this.prisma.incident.create({
+        await this.prisma.incident.update({
+          where: { id: openIncident.id },
           data: {
-            title,
-            severity: highestSeverity,
-            organizationId,
+            title: `${baseTitle} + ${total - 1} more alert(s)`,
+            severity: this.pickHighestSeverity([
+              openIncident.severity,
+              ...groupedAlerts.map((a) => a.rule.severity),
+            ]),
           },
         });
 
-        await this.prisma.alert.updateMany({
-          where: { id: { in: groupedAlerts.map((a) => a.id) } },
-          data: { incidentId: incident.id },
-        });
-
         this.logger.warn(
-          `Incident created: ${incident.id} grouping ${groupedAlerts.length} alert(s)`,
+          `Incident ${openIncident.id}: added ${groupedAlerts.length} new alert(s)`,
         );
+        continue;
       }
+
+      const highestSeverity = this.pickHighestSeverity(
+        groupedAlerts.map((a) => a.rule.severity),
+      );
+      const primaryRuleName = groupedAlerts[0].rule.name;
+      const title =
+        groupedAlerts.length === 1
+          ? primaryRuleName
+          : `${primaryRuleName} + ${groupedAlerts.length - 1} more alert(s)`;
+
+      const incident = await this.prisma.incident.create({
+        data: {
+          title,
+          severity: highestSeverity,
+          organizationId,
+        },
+      });
+
+      await this.prisma.alert.updateMany({
+        where: { id: { in: alertIds } },
+        data: { incidentId: incident.id },
+      });
+
+      this.logger.warn(
+        `Incident created: ${incident.id} grouping ${groupedAlerts.length} alert(s)`,
+      );
     }
+  }
+
+  // What an alert is about: its server; otherwise (event alerts) the IP, user
+  // or account it names; otherwise just the rule that raised it.
+  private correlationKey(alert: CorrelatedAlert): string {
+    if (alert.serverId) return `server:${alert.serverId}`;
+    const subject = this.subjectOf(alert);
+    return subject ? `subject:${subject}` : `rule:${alert.ruleId}`;
+  }
+
+  private subjectOf(alert: CorrelatedAlert): string | null {
+    const details = (alert.details ?? {}) as Record<string, unknown>;
+    const subject = details.groupValue ?? details.email;
+    return typeof subject === 'string' && subject ? subject : null;
+  }
+
+  // An unresolved incident of this organization that already holds an alert
+  // about the same thing, raised at most CORRELATION_WINDOW_MS before this one.
+  private findIncidentToJoin(organizationId: string, alert: CorrelatedAlert) {
+    const subject = this.subjectOf(alert);
+    const aboutTheSameThing: Prisma.AlertWhereInput = alert.serverId
+      ? { serverId: alert.serverId }
+      : subject
+        ? {
+            serverId: null,
+            OR: [
+              { details: { path: ['groupValue'], equals: subject } },
+              { details: { path: ['email'], equals: subject } },
+            ],
+          }
+        : { serverId: null, ruleId: alert.ruleId };
+
+    return this.prisma.incident.findFirst({
+      where: {
+        organizationId,
+        status: { not: 'RESOLVED' },
+        alerts: {
+          some: {
+            ...aboutTheSameThing,
+            createdAt: {
+              gte: new Date(alert.createdAt.getTime() - CORRELATION_WINDOW_MS),
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      include: { _count: { select: { alerts: true } } },
+    });
   }
 
   private pickHighestSeverity(
