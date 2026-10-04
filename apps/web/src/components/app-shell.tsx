@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -26,6 +26,23 @@ const NAV_ITEMS = [
   { href: '/assistant', label: 'Assistant', icon: Bot },
 ];
 
+// The sidebar's collapsed state is kept in localStorage. Read it as an external
+// store (the server renders it expanded) instead of copying it into state in an
+// effect. 'storage' covers other tabs; SIDEBAR_EVENT covers this tab.
+const SIDEBAR_KEY = 'sidebarCollapsed';
+const SIDEBAR_EVENT = 'sidebar-collapsed-change';
+
+function subscribeToSidebar(onChange: () => void) {
+  window.addEventListener('storage', onChange);
+  window.addEventListener(SIDEBAR_EVENT, onChange);
+  return () => {
+    window.removeEventListener('storage', onChange);
+    window.removeEventListener(SIDEBAR_EVENT, onChange);
+  };
+}
+
+const isSidebarCollapsed = () => localStorage.getItem(SIDEBAR_KEY) === '1';
+
 export function AppShell({
   children,
   title,
@@ -34,13 +51,8 @@ export function AppShell({
   title: string;
 }) {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
+  const collapsed = useSyncExternalStore(subscribeToSidebar, isSidebarCollapsed, () => false);
   const [openIncidents, setOpenIncidents] = useState<number | null>(null);
-
-  useEffect(() => {
-    const stored = localStorage.getItem('sidebarCollapsed');
-    if (stored === '1') setCollapsed(true);
-  }, []);
 
   useEffect(() => {
     apiClient
@@ -50,9 +62,8 @@ export function AppShell({
   }, []);
 
   function toggleCollapsed() {
-    const next = !collapsed;
-    setCollapsed(next);
-    localStorage.setItem('sidebarCollapsed', next ? '1' : '0');
+    localStorage.setItem(SIDEBAR_KEY, collapsed ? '0' : '1');
+    window.dispatchEvent(new Event(SIDEBAR_EVENT));
   }
 
   const sidebarWidth = collapsed ? 'w-16' : 'w-60';
