@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { ProtectedRoute } from '@/components/protected-route';
 import { AppShell } from '@/components/app-shell';
 import { apiClient } from '@/lib/api-client';
+import { canManageSecurity } from '@/lib/permissions';
+import { useAuth } from '@/contexts/auth-context';
 import { Badge } from '@/components/ui/badge';
 import { ChevronDown, ShieldAlert, Search, CheckCircle2, ClipboardList, Server as ServerIcon } from 'lucide-react';
 
@@ -116,6 +118,8 @@ function AlertRow({ alert }: { alert: Alert }) {
 }
 
 function IncidentsContent() {
+  const { user } = useAuth();
+  const canChangeStatus = canManageSecurity(user?.role);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -131,8 +135,13 @@ function IncidentsContent() {
   }, []);
 
   async function updateStatus(incidentId: string, status: string) {
-    await apiClient.patch(`/incidents/${incidentId}/status`, { status });
-    loadIncidents();
+    setError('');
+    try {
+      await apiClient.patch(`/incidents/${incidentId}/status`, { status });
+      loadIncidents();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update the incident');
+    }
   }
 
   const openCount = incidents.filter((i) => i.status !== 'RESOLVED').length;
@@ -204,30 +213,36 @@ function IncidentsContent() {
 
                 {expanded && (
                   <div className="border-t border-border p-4">
-                    <div className="mb-4 flex gap-2">
-                      <button
-                        onClick={() => updateStatus(inc.id, 'INVESTIGATING')}
-                        className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-semibold transition-colors ${
-                          inc.status === 'INVESTIGATING'
-                            ? 'border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                            : 'border-border text-foreground hover:bg-muted'
-                        }`}
-                      >
-                        <Search className="size-3.5" strokeWidth={2} />
-                        Investigating
-                      </button>
-                      <button
-                        onClick={() => updateStatus(inc.id, 'RESOLVED')}
-                        className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-semibold transition-colors ${
-                          inc.status === 'RESOLVED'
-                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                            : 'border-border text-foreground hover:bg-muted'
-                        }`}
-                      >
-                        <CheckCircle2 className="size-3.5" strokeWidth={2} />
-                        Resolved
-                      </button>
-                    </div>
+                    {canChangeStatus ? (
+                      <div className="mb-4 flex gap-2">
+                        <button
+                          onClick={() => updateStatus(inc.id, 'INVESTIGATING')}
+                          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-semibold transition-colors ${
+                            inc.status === 'INVESTIGATING'
+                              ? 'border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                              : 'border-border text-foreground hover:bg-muted'
+                          }`}
+                        >
+                          <Search className="size-3.5" strokeWidth={2} />
+                          Investigating
+                        </button>
+                        <button
+                          onClick={() => updateStatus(inc.id, 'RESOLVED')}
+                          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-semibold transition-colors ${
+                            inc.status === 'RESOLVED'
+                              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                              : 'border-border text-foreground hover:bg-muted'
+                          }`}
+                        >
+                          <CheckCircle2 className="size-3.5" strokeWidth={2} />
+                          Resolved
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="mb-4 text-[13px] text-muted-foreground">
+                        Only owners, admins and security analysts can change an incident&apos;s status.
+                      </p>
+                    )}
 
                     <p className="mb-2 text-[12px] font-bold uppercase tracking-wide text-muted-foreground">
                       Alerts in this incident ({inc.alerts.length})

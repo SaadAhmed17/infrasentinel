@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { ProtectedRoute } from '@/components/protected-route';
 import { AppShell } from '@/components/app-shell';
 import { apiClient } from '@/lib/api-client';
+import { canManageSecurity } from '@/lib/permissions';
+import { useAuth } from '@/contexts/auth-context';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Pencil, Trash2, Info, ListChecks } from 'lucide-react';
 
@@ -43,6 +45,29 @@ const METRIC_FIELDS = [
   { value: 'LOAD_AVERAGE', label: 'Load Average' },
 ];
 
+// The event types the platform records and the fields they carry; the API
+// rejects anything else (KNOWN_EVENT_TYPES / GROUPABLE_EVENT_FIELDS in rule-config.ts).
+const EVENT_TYPES = [
+  { value: 'AUTH_LOGIN_FAILURE', label: 'Web login failed' },
+  { value: 'AUTH_LOGIN_SUCCESS', label: 'Web login succeeded' },
+  { value: 'SSH_LOGIN_FAILURE', label: 'SSH login failed' },
+  { value: 'SSH_LOGIN_SUCCESS', label: 'SSH login succeeded' },
+  { value: 'AUTH_PASSWORD_RESET_REQUESTED', label: 'Password reset requested' },
+  { value: 'AUTH_PASSWORD_RESET_COMPLETED', label: 'Password reset completed' },
+];
+
+const GROUP_BY_FIELDS = [
+  { value: 'ipAddress', label: 'IP address' },
+  { value: 'email', label: 'E-mail (web logins)' },
+  { value: 'username', label: 'Username (SSH)' },
+  { value: 'serverId', label: 'Server (SSH)' },
+];
+
+// Keeps a value that is no longer in the list (e.g. an older rule) selectable.
+function withCurrent(options: { value: string; label: string }[], current: string) {
+  return options.some((o) => o.value === current) ? options : [...options, { value: current, label: current }];
+}
+
 const SEVERITY_STYLES: Record<string, string> = {
   CRITICAL: 'border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-400',
   HIGH: 'border-orange-500/20 bg-orange-500/10 text-orange-600 dark:text-orange-400',
@@ -72,6 +97,8 @@ const inputClass =
 const labelClass = 'block text-[12.5px] font-bold text-muted-foreground';
 
 function RulesContent() {
+  const { user } = useAuth();
+  const canEdit = canManageSecurity(user?.role);
   const [rules, setRules] = useState<Rule[]>([]);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -136,14 +163,24 @@ function RulesContent() {
   }
 
   async function handleToggle(rule: Rule) {
-    await apiClient.patch(`/rules/${rule.id}/toggle`, { isActive: !rule.isActive });
-    loadRules();
+    setError('');
+    try {
+      await apiClient.patch(`/rules/${rule.id}/toggle`, { isActive: !rule.isActive });
+      loadRules();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to change the rule');
+    }
   }
 
   async function handleDelete(rule: Rule) {
     if (confirm(`Delete rule "${rule.name}"? This also removes its alert history.`)) {
-      await apiClient.delete(`/rules/${rule.id}`);
-      loadRules();
+      setError('');
+      try {
+        await apiClient.delete(`/rules/${rule.id}`);
+        loadRules();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to delete the rule');
+      }
     }
   }
 
@@ -177,41 +214,49 @@ function RulesContent() {
         <p className="text-[14.5px] font-semibold text-muted-foreground">
           {rules.length === 0 ? 'No rules configured yet' : `${activeCount} of ${rules.length} rules active`}
         </p>
-        <button
-          onClick={() => (editingRuleId ? resetForm() : setShowForm(!showForm))}
-          className="flex h-9.5 items-center gap-1.5 rounded-lg bg-[oklch(0.62_0.19_265)] px-3.5 text-[14px] font-bold text-white hover:bg-[oklch(0.66_0.19_265)]"
-        >
-          <Plus className="size-4" strokeWidth={2.25} />
-          New Rule
-        </button>
+        {canEdit ? (
+          <button
+            onClick={() => (editingRuleId ? resetForm() : setShowForm(!showForm))}
+            className="flex h-9.5 items-center gap-1.5 rounded-lg bg-[oklch(0.62_0.19_265)] px-3.5 text-[14px] font-bold text-white hover:bg-[oklch(0.66_0.19_265)]"
+          >
+            <Plus className="size-4" strokeWidth={2.25} />
+            New Rule
+          </button>
+        ) : (
+          <p className="text-[13px] text-muted-foreground">
+            Only owners, admins and security analysts can change rules.
+          </p>
+        )}
       </div>
 
-      <div className="mb-5 flex flex-wrap items-center gap-2">
-        <span className="text-[12.5px] font-bold text-muted-foreground">Quick presets:</span>
-        {PRESETS.map((p) => (
-          <button
-            key={p.label}
-            type="button"
-            onClick={() => {
-              setName(p.label);
-              setRuleType(p.ruleType);
-              if (p.metricField) setMetricField(p.metricField);
-              if (p.operator) setOperator(p.operator);
-              if (p.threshold) setThreshold(p.threshold);
-              if (p.durationSeconds) setDurationSeconds(p.durationSeconds);
-              if (p.eventType) setEventType(p.eventType);
-              if (p.groupByField) setGroupByField(p.groupByField);
-              if (p.maxCount) setMaxCount(p.maxCount);
-              if (p.windowSeconds) setWindowSeconds(p.windowSeconds);
-              setSeverity(p.severity);
-              setShowForm(true);
-            }}
-            className="rounded-full border border-[oklch(0.62_0.19_265)]/25 bg-[oklch(0.62_0.19_265)]/10 px-3 py-1 text-[12.5px] font-semibold text-[oklch(0.55_0.19_265)] hover:bg-[oklch(0.62_0.19_265)]/20 dark:text-[oklch(0.72_0.15_265)]"
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
+      {canEdit && (
+        <div className="mb-5 flex flex-wrap items-center gap-2">
+          <span className="text-[12.5px] font-bold text-muted-foreground">Quick presets:</span>
+          {PRESETS.map((p) => (
+            <button
+              key={p.label}
+              type="button"
+              onClick={() => {
+                setName(p.label);
+                setRuleType(p.ruleType);
+                if (p.metricField) setMetricField(p.metricField);
+                if (p.operator) setOperator(p.operator);
+                if (p.threshold) setThreshold(p.threshold);
+                if (p.durationSeconds) setDurationSeconds(p.durationSeconds);
+                if (p.eventType) setEventType(p.eventType);
+                if (p.groupByField) setGroupByField(p.groupByField);
+                if (p.maxCount) setMaxCount(p.maxCount);
+                if (p.windowSeconds) setWindowSeconds(p.windowSeconds);
+                setSeverity(p.severity);
+                setShowForm(true);
+              }}
+              className="rounded-full border border-[oklch(0.62_0.19_265)]/25 bg-[oklch(0.62_0.19_265)]/10 px-3 py-1 text-[12.5px] font-semibold text-[oklch(0.55_0.19_265)] hover:bg-[oklch(0.62_0.19_265)]/20 dark:text-[oklch(0.72_0.15_265)]"
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {error && (
         <div className="mb-5 rounded-lg border border-red-500/20 bg-red-500/10 px-3.5 py-2.5 text-[14px] font-medium text-red-600 dark:text-red-400">
@@ -219,7 +264,7 @@ function RulesContent() {
         </div>
       )}
 
-      {showForm && (
+      {canEdit && showForm && (
         <form onSubmit={handleCreate} className="mb-5 space-y-4 rounded-xl border border-border bg-card p-5 shadow-sm">
           <div>
             <label className={labelClass}>Rule name</label>
@@ -266,11 +311,19 @@ function RulesContent() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>Event type</label>
-                <input value={eventType} onChange={(e) => setEventType(e.target.value)} className={inputClass} />
+                <select value={eventType} onChange={(e) => setEventType(e.target.value)} className={inputClass}>
+                  {withCurrent(EVENT_TYPES, eventType).map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className={labelClass}>Group by field</label>
-                <input value={groupByField} onChange={(e) => setGroupByField(e.target.value)} className={inputClass} />
+                <select value={groupByField} onChange={(e) => setGroupByField(e.target.value)} className={inputClass}>
+                  {withCurrent(GROUP_BY_FIELDS, groupByField).map((f) => (
+                    <option key={f.value} value={f.value}>{f.label}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className={labelClass}>Max count</label>
@@ -375,10 +428,12 @@ function RulesContent() {
                   <td className="px-5 py-3.5">
                     <Badge className={SEVERITY_STYLES[r.severity] ?? SEVERITY_STYLES.LOW}>{r.severity}</Badge>
                   </td>
-                                    <td className="px-5 py-3.5">
+                  <td className="px-5 py-3.5">
                     <button
                       onClick={() => handleToggle(r)}
-                      className={`relative inline-block shrink-0 rounded-full transition-colors ${
+                      disabled={!canEdit}
+                      title={canEdit ? undefined : r.isActive ? 'Active' : 'Inactive'}
+                      className={`relative inline-block shrink-0 rounded-full transition-colors disabled:cursor-default disabled:opacity-60 ${
                         r.isActive ? 'bg-emerald-500' : 'bg-muted-foreground/25'
                       }`}
                       style={{ width: 36, height: 20 }}
@@ -397,22 +452,24 @@ function RulesContent() {
                     </button>
                   </td>
                   <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => startEdit(r)}
-                        className="flex size-7.5 items-center justify-center rounded-md border border-border text-muted-foreground hover:border-[oklch(0.62_0.19_265)] hover:text-[oklch(0.55_0.19_265)] dark:hover:text-[oklch(0.72_0.15_265)]"
-                        aria-label="Edit rule"
-                      >
-                        <Pencil className="size-3.5" strokeWidth={2} />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(r)}
-                        className="flex size-7.5 items-center justify-center rounded-md border border-border text-muted-foreground hover:border-red-500/40 hover:text-red-600 dark:hover:text-red-400"
-                        aria-label="Delete rule"
-                      >
-                        <Trash2 className="size-3.5" strokeWidth={2} />
-                      </button>
-                    </div>
+                    {canEdit && (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => startEdit(r)}
+                          className="flex size-7.5 items-center justify-center rounded-md border border-border text-muted-foreground hover:border-[oklch(0.62_0.19_265)] hover:text-[oklch(0.55_0.19_265)] dark:hover:text-[oklch(0.72_0.15_265)]"
+                          aria-label="Edit rule"
+                        >
+                          <Pencil className="size-3.5" strokeWidth={2} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(r)}
+                          className="flex size-7.5 items-center justify-center rounded-md border border-border text-muted-foreground hover:border-red-500/40 hover:text-red-600 dark:hover:text-red-400"
+                          aria-label="Delete rule"
+                        >
+                          <Trash2 className="size-3.5" strokeWidth={2} />
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
