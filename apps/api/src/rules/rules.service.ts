@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateRuleDto } from './dto/create-rule.dto';
+import { UpdateRuleDto } from './dto/update-rule.dto';
 
 @Injectable()
 export class RulesService {
@@ -51,11 +52,7 @@ export class RulesService {
       ruleId,
     };
   }
-  async updateRule(
-    organizationId: string,
-    ruleId: string,
-    dto: Partial<CreateRuleDto>,
-  ) {
+  async updateRule(organizationId: string, ruleId: string, dto: UpdateRuleDto) {
     const rule = await this.prisma.rule.findFirst({
       where: { id: ruleId, organizationId },
     });

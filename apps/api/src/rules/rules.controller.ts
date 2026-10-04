@@ -15,6 +15,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/types/authenticated-user.type';
 import { CreateRuleDto } from './dto/create-rule.dto';
+import { UpdateRuleDto } from './dto/update-rule.dto';
 
 @Controller('rules')
 @UseGuards(JwtAuthGuard)
@@ -34,7 +35,7 @@ export class RulesController {
   updateRule(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
-    @Body() dto: Partial<CreateRuleDto>,
+    @Body() dto: UpdateRuleDto,
   ) {
     return this.rulesService.updateRule(user.organizationId, id, dto);
   }
