@@ -352,9 +352,13 @@ export class RuleEngineService {
     }
 
     for (const [email, attempts] of byEmail.entries()) {
+      const previous = await this.previousAlertFor(rule.id, 'email', email);
+      if (previous.isOpen) continue;
+
       // Walk the attempts in time order: the account counts as compromised when
       // a success follows failures from at least maxCount distinct IPs. Whatever
       // happens after that success (another failure, say) must not hide it.
+      // A success an earlier alert already reported does not count again.
       const distinctIps = new Set<string>();
       let failureCount = 0;
       let compromisingSuccess: (typeof attempts)[number] | undefined;
@@ -363,7 +367,11 @@ export class RuleEngineService {
           const ip = (attempt.metadata as Record<string, unknown>).ipAddress;
           if (typeof ip === 'string') distinctIps.add(ip);
           failureCount++;
-        } else if (distinctIps.size >= rule.maxCount) {
+        } else if (
+          distinctIps.size >= rule.maxCount &&
+          (!previous.reportedUntil ||
+            attempt.createdAt > previous.reportedUntil)
+        ) {
           compromisingSuccess = attempt;
           break;
         }
@@ -371,15 +379,6 @@ export class RuleEngineService {
 
       // credential stuffing only matters if they eventually got in
       if (!compromisingSuccess) continue;
-
-      const existingOpenAlert = await this.prisma.alert.findFirst({
-        where: {
-          ruleId: rule.id,
-          status: 'OPEN',
-          details: { path: ['email'], equals: email },
-        },
-      });
-      if (existingOpenAlert) continue;
 
       await this.prisma.alert.create({
         data: {
@@ -389,6 +388,7 @@ export class RuleEngineService {
             distinctIpCount: distinctIps.size,
             ipAddresses: Array.from(distinctIps),
             totalFailures: failureCount,
+            lastEventAt: compromisingSuccess.createdAt.toISOString(),
           },
           status: 'OPEN',
         },
@@ -486,36 +486,72 @@ export class RuleEngineService {
     for (const [groupValue, events] of groups.entries()) {
       if (events.length < rule.maxCount) continue;
 
-      const existingOpenAlert = await this.prisma.alert.findFirst({
-        where: {
-          ruleId: rule.id,
-          status: 'OPEN',
-          details: { path: ['groupValue'], equals: groupValue },
-        },
-      });
-      if (existingOpenAlert) {
+      const previous = await this.previousAlertFor(
+        rule.id,
+        'groupValue',
+        groupValue,
+      );
+      if (previous.isOpen) {
         this.logger.debug(
           `Group "${groupValue}": alert already OPEN, skipping duplicate`,
         );
         continue;
       }
 
+      // Events an earlier (since resolved) alert already reported stay inside
+      // the window for a while; only events after them count towards a new one.
+      const newEvents = previous.reportedUntil
+        ? events.filter((e) => e.createdAt > previous.reportedUntil!)
+        : events;
+      if (newEvents.length < rule.maxCount) continue;
+
+      const lastEventAt = newEvents.reduce(
+        (latest, e) => (e.createdAt > latest ? e.createdAt : latest),
+        newEvents[0].createdAt,
+      );
+
       await this.prisma.alert.create({
         data: {
           ruleId: rule.id,
           details: {
             groupValue,
-            count: events.length,
+            count: newEvents.length,
             groupByField: rule.groupByField,
             eventType: rule.eventType,
+            lastEventAt: lastEventAt.toISOString(),
           },
           status: 'OPEN',
         },
       });
 
       this.logger.warn(
-        `Alert created: ${events.length} "${rule.eventType}" events from ${rule.groupByField}="${groupValue}" (rule "${rule.id}")`,
+        `Alert created: ${newEvents.length} "${rule.eventType}" events from ${rule.groupByField}="${groupValue}" (rule "${rule.id}")`,
       );
     }
+  }
+
+  // The latest alert this rule raised about the same subject (an IP, an
+  // account, ...): whether it is still open, and up to which event time it
+  // already reported, so the same events never raise a second alert.
+  private async previousAlertFor(
+    ruleId: string,
+    subjectField: 'groupValue' | 'email',
+    subject: string,
+  ): Promise<{ isOpen: boolean; reportedUntil: Date | null }> {
+    const alert = await this.prisma.alert.findFirst({
+      where: { ruleId, details: { path: [subjectField], equals: subject } },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!alert) return { isOpen: false, reportedUntil: null };
+
+    const { lastEventAt } = alert.details as Record<string, unknown>;
+    return {
+      isOpen: alert.status === 'OPEN',
+      // Alerts raised before lastEventAt was recorded: use when they were raised.
+      reportedUntil:
+        typeof lastEventAt === 'string'
+          ? new Date(lastEventAt)
+          : alert.createdAt,
+    };
   }
 }
