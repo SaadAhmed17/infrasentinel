@@ -1,13 +1,23 @@
-import { IsEnum, IsNumber, IsString, IsOptional, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsIn,
+  IsNotEmpty,
+  IsNumber,
+  IsString,
+  IsOptional,
+  Min,
+} from 'class-validator';
 import {
   RuleType,
   MetricField,
   ComparisonOperator,
   Severity,
 } from '@prisma/client';
+import { GROUPABLE_EVENT_FIELDS, KNOWN_EVENT_TYPES } from '../rule-config';
 
 export class CreateRuleDto {
   @IsString()
+  @IsNotEmpty()
   name: string;
 
   @IsEnum(RuleType)
@@ -28,16 +38,16 @@ export class CreateRuleDto {
 
   @IsOptional()
   @IsNumber()
-  @Min(0)
+  @Min(1)
   durationSeconds?: number;
 
   // Event-frequency fields (optional — only used when ruleType = EVENT_FREQUENCY)
   @IsOptional()
-  @IsString()
+  @IsIn(KNOWN_EVENT_TYPES)
   eventType?: string;
 
   @IsOptional()
-  @IsString()
+  @IsIn(GROUPABLE_EVENT_FIELDS)
   groupByField?: string;
 
   @IsOptional()

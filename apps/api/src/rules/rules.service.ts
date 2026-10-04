@@ -2,12 +2,14 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateRuleDto } from './dto/create-rule.dto';
 import { UpdateRuleDto } from './dto/update-rule.dto';
+import { assertRuleIsComplete } from './rule-config';
 
 @Injectable()
 export class RulesService {
   constructor(private prisma: PrismaService) {}
 
   async createRule(organizationId: string, dto: CreateRuleDto) {
+    assertRuleIsComplete(dto);
     return this.prisma.rule.create({
       data: { ...dto, organizationId },
     });
@@ -62,6 +64,9 @@ export class RulesService {
       where: { id: ruleId, organizationId },
     });
     if (!rule) throw new NotFoundException('Rule not found');
+
+    // The rule as it will be after this update must still be able to fire.
+    assertRuleIsComplete({ ...rule, ...dto });
 
     return this.prisma.rule.update({
       where: { id: ruleId },

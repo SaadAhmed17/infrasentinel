@@ -1,10 +1,19 @@
-import { IsEnum, IsNumber, IsString, IsOptional, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsIn,
+  IsNotEmpty,
+  IsNumber,
+  IsString,
+  IsOptional,
+  Min,
+} from 'class-validator';
 import {
   RuleType,
   MetricField,
   ComparisonOperator,
   Severity,
 } from '@prisma/client';
+import { GROUPABLE_EVENT_FIELDS, KNOWN_EVENT_TYPES } from '../rule-config';
 
 // A real class (not the TypeScript type `Partial<CreateRuleDto>`) so the global
 // ValidationPipe validates every field and strips anything else, such as
@@ -12,6 +21,7 @@ import {
 export class UpdateRuleDto {
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
   name?: string;
 
   @IsOptional()
@@ -32,15 +42,15 @@ export class UpdateRuleDto {
 
   @IsOptional()
   @IsNumber()
-  @Min(0)
+  @Min(1)
   durationSeconds?: number;
 
   @IsOptional()
-  @IsString()
+  @IsIn(KNOWN_EVENT_TYPES)
   eventType?: string;
 
   @IsOptional()
-  @IsString()
+  @IsIn(GROUPABLE_EVENT_FIELDS)
   groupByField?: string;
 
   @IsOptional()
