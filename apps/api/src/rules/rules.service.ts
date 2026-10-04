@@ -65,12 +65,18 @@ export class RulesService {
     });
     if (!rule) throw new NotFoundException('Rule not found');
 
+    // Fields the request did not send are present on the DTO as undefined;
+    // they must not overwrite the rule's current values in the check below.
+    const changes = Object.fromEntries(
+      Object.entries(dto).filter(([, value]) => value !== undefined),
+    ) as UpdateRuleDto;
+
     // The rule as it will be after this update must still be able to fire.
-    assertRuleIsComplete({ ...rule, ...dto });
+    assertRuleIsComplete({ ...rule, ...changes });
 
     return this.prisma.rule.update({
       where: { id: ruleId },
-      data: dto,
+      data: changes,
     });
   }
 }
