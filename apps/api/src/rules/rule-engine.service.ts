@@ -175,6 +175,27 @@ export class RuleEngineService {
       await this.evaluateUnusualAccessRule(rule);
     }
   }
+  @Cron(CronExpression.EVERY_30_SECONDS)
+  async markStaleServersOffline() {
+    const staleCutoff = new Date(Date.now() - 120 * 1000); // no heartbeat in 120s = offline
+
+    const staleServers = await this.prisma.server.findMany({
+      where: {
+        status: 'ONLINE',
+        lastHeartbeat: { lt: staleCutoff },
+      },
+    });
+
+    for (const server of staleServers) {
+      await this.prisma.server.update({
+        where: { id: server.id },
+        data: { status: 'OFFLINE' },
+      });
+      this.logger.warn(
+        `Server "${server.name}" marked OFFLINE — no heartbeat for 120+ seconds`,
+      );
+    }
+  }
 
   private async evaluateMetricRule(rule: {
     id: string;
