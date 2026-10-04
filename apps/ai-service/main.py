@@ -1,12 +1,10 @@
 import os
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 from inference import score_server
 from rag import index_single_incident, query_incidents, reindex_organization
-from fastapi import FastAPI, HTTPException, Header
-from fastapi import Depends
 
 SHARED_SECRET = os.getenv("AI_SERVICE_SHARED_SECRET")
 
