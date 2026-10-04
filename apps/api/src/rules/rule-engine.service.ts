@@ -352,21 +352,25 @@ export class RuleEngineService {
     }
 
     for (const [email, attempts] of byEmail.entries()) {
-      const failures = attempts.filter(
-        (a) => a.eventType === 'AUTH_LOGIN_FAILURE',
-      );
-      const lastAttempt = attempts[attempts.length - 1];
-      const endedInSuccess = lastAttempt.eventType === 'AUTH_LOGIN_SUCCESS';
+      // Walk the attempts in time order: the account counts as compromised when
+      // a success follows failures from at least maxCount distinct IPs. Whatever
+      // happens after that success (another failure, say) must not hide it.
+      const distinctIps = new Set<string>();
+      let failureCount = 0;
+      let compromisingSuccess: (typeof attempts)[number] | undefined;
+      for (const attempt of attempts) {
+        if (attempt.eventType === 'AUTH_LOGIN_FAILURE') {
+          const ip = (attempt.metadata as Record<string, unknown>).ipAddress;
+          if (typeof ip === 'string') distinctIps.add(ip);
+          failureCount++;
+        } else if (distinctIps.size >= rule.maxCount) {
+          compromisingSuccess = attempt;
+          break;
+        }
+      }
 
-      if (!endedInSuccess) continue; // credential stuffing only matters if they eventually got in
-
-      const distinctIps = new Set(
-        failures.map(
-          (f) => (f.metadata as Record<string, unknown>).ipAddress as string,
-        ),
-      );
-
-      if (distinctIps.size < rule.maxCount) continue;
+      // credential stuffing only matters if they eventually got in
+      if (!compromisingSuccess) continue;
 
       const existingOpenAlert = await this.prisma.alert.findFirst({
         where: {
@@ -384,7 +388,7 @@ export class RuleEngineService {
             email,
             distinctIpCount: distinctIps.size,
             ipAddresses: Array.from(distinctIps),
-            totalFailures: failures.length,
+            totalFailures: failureCount,
           },
           status: 'OPEN',
         },
