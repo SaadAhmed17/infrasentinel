@@ -530,6 +530,7 @@ export class RuleEngineService {
       await this.prisma.alert.create({
         data: {
           ruleId: rule.id,
+          serverId: await this.serverOfEvents(newEvents, rule.organizationId),
           details: {
             groupValue,
             count: newEvents.length,
@@ -545,6 +546,28 @@ export class RuleEngineService {
         `Alert created: ${newEvents.length} "${rule.eventType}" events from ${rule.groupByField}="${groupValue}" (rule "${rule.id}")`,
       );
     }
+  }
+
+  // Agent events (e.g. SSH logins) name the server they came from. When all the
+  // events behind an alert come from one server of this organization, link the
+  // alert to it, so the incident and dashboard show where the attack happened.
+  private async serverOfEvents(
+    events: { metadata: unknown }[],
+    organizationId: string,
+  ): Promise<string | null> {
+    const serverIds = new Set(
+      events
+        .map((e) => (e.metadata as Record<string, unknown>).serverId)
+        .filter((id): id is string => typeof id === 'string'),
+    );
+    if (serverIds.size !== 1) return null;
+
+    const [serverId] = serverIds;
+    const server = await this.prisma.server.findFirst({
+      where: { id: serverId, organizationId },
+      select: { id: true },
+    });
+    return server?.id ?? null;
   }
 
   // The latest alert this rule raised about the same subject (an IP, an
