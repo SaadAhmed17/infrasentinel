@@ -19,22 +19,22 @@ PUBLIC_PATHS = {"/health"}
 
 
 @app.middleware("http")
-async def require_service_token(request: Request, call_next):
+async def require_shared_secret(request: Request, call_next):
     """Only the InfraSentinel API may call this service: every request except
-    /health must carry the shared AI_SERVICE_TOKEN in the X-Service-Token header."""
+    /health must carry AI_SERVICE_SHARED_SECRET in the x-internal-secret header
+    (same names as on the main branch)."""
     if request.url.path in PUBLIC_PATHS:
         return await call_next(request)
 
-    expected = os.getenv("AI_SERVICE_TOKEN")
+    expected = os.getenv("AI_SERVICE_SHARED_SECRET")
     if not expected:
         # Fail closed: an unconfigured service must not be open to everyone.
         return JSONResponse(status_code=503, content={
-            "detail": "AI_SERVICE_TOKEN is not configured on the AI service"})
+            "detail": "AI_SERVICE_SHARED_SECRET is not configured on the AI service"})
 
-    provided = request.headers.get("X-Service-Token", "")
+    provided = request.headers.get("x-internal-secret", "")
     if not hmac.compare_digest(provided.encode(), expected.encode()):
-        return JSONResponse(status_code=401, content={
-            "detail": "Missing or invalid service token"})
+        return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
 
     return await call_next(request)
 
