@@ -18,8 +18,13 @@ export class RulesService {
   }
 
   async toggleRule(organizationId: string, ruleId: string, isActive: boolean) {
-    return this.prisma.rule.updateMany({
+    const rule = await this.prisma.rule.findFirst({
       where: { id: ruleId, organizationId },
+    });
+    if (!rule) throw new NotFoundException('Rule not found');
+
+    return this.prisma.rule.update({
+      where: { id: ruleId },
       data: { isActive },
     });
   }

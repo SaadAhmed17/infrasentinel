@@ -16,6 +16,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/types/authenticated-user.type';
 import { CreateRuleDto } from './dto/create-rule.dto';
 import { UpdateRuleDto } from './dto/update-rule.dto';
+import { ToggleRuleDto } from './dto/toggle-rule.dto';
 
 @Controller('rules')
 @UseGuards(JwtAuthGuard)
@@ -61,8 +62,8 @@ export class RulesController {
   toggleRule(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
-    @Body('isActive') isActive: boolean,
+    @Body() dto: ToggleRuleDto,
   ) {
-    return this.rulesService.toggleRule(user.organizationId, id, isActive);
+    return this.rulesService.toggleRule(user.organizationId, id, dto.isActive);
   }
 }
