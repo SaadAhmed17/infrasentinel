@@ -3,6 +3,11 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { AnomalyService } from '../anomaly/anomaly.service';
 
+// Agents push a reading about every 10 s (plus a 1 s CPU sample), so a breach
+// "sustained for 60 s" may have its first reading up to ~15 s after the window
+// start.
+const SAMPLE_TOLERANCE_SECONDS = 15;
+
 @Injectable()
 export class RuleEngineService {
   private readonly logger = new Logger(RuleEngineService.name);
@@ -237,6 +242,18 @@ export class RuleEngineService {
       );
 
       if (!allBreached) continue;
+
+      // "Sustained for durationSeconds" (like Prometheus `for:`): the breaching
+      // readings must cover the whole window, give or take one agent push. A
+      // single short spike, or the first reading after a silence, is not enough.
+      const observedSeconds =
+        (Date.now() - recentMetrics[0].timestamp.getTime()) / 1000;
+      if (observedSeconds < rule.durationSeconds - SAMPLE_TOLERANCE_SECONDS) {
+        this.logger.debug(
+          `Server "${server.name}": breach observed for only ${Math.round(observedSeconds)}s of ${rule.durationSeconds}s, not sustained yet`,
+        );
+        continue;
+      }
 
       const existingOpenAlert = await this.prisma.alert.findFirst({
         where: { ruleId: rule.id, serverId: server.id, status: 'OPEN' },
