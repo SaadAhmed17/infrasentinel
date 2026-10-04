@@ -23,6 +23,8 @@ interface Incident {
   createdAt: string;
 }
 
+type TabKey = 'OPEN' | 'INVESTIGATING' | 'RESOLVED';
+
 function severityColor(s: string) {
   switch (s) {
     case 'CRITICAL': return 'bg-red-100 text-red-700';
@@ -42,6 +44,7 @@ function statusColor(s: string) {
 
 function IncidentsContent() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [activeTab, setActiveTab] = useState<TabKey>('OPEN');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [error, setError] = useState('');
 
@@ -60,6 +63,20 @@ function IncidentsContent() {
     loadIncidents();
   }
 
+  const counts: Record<TabKey, number> = {
+    OPEN: incidents.filter((i) => i.status === 'OPEN').length,
+    INVESTIGATING: incidents.filter((i) => i.status === 'INVESTIGATING').length,
+    RESOLVED: incidents.filter((i) => i.status === 'RESOLVED').length,
+  };
+
+  const visibleIncidents = incidents.filter((i) => i.status === activeTab);
+
+  const TABS: { key: TabKey; label: string }[] = [
+    { key: 'OPEN', label: 'Open' },
+    { key: 'INVESTIGATING', label: 'Investigating' },
+    { key: 'RESOLVED', label: 'Resolved' },
+  ];
+
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="mx-auto max-w-3xl">
@@ -68,8 +85,24 @@ function IncidentsContent() {
 
         {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
+        <div className="mb-4 flex gap-1 border-b">
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => { setActiveTab(tab.key); setExpandedId(null); }}
+              className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+                activeTab === tab.key
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {tab.label} <span className="ml-1 text-xs text-gray-400">({counts[tab.key]})</span>
+            </button>
+          ))}
+        </div>
+
         <div className="space-y-3">
-          {incidents.map((inc) => (
+          {visibleIncidents.map((inc) => (
             <div key={inc.id} className="rounded-lg border bg-white shadow-sm">
               <button
                 onClick={() => setExpandedId(expandedId === inc.id ? null : inc.id)}
@@ -88,12 +121,21 @@ function IncidentsContent() {
               {expandedId === inc.id && (
                 <div className="border-t p-4">
                   <div className="mb-3 flex gap-2">
-                    <button onClick={() => updateStatus(inc.id, 'INVESTIGATING')} className="rounded-md border px-3 py-1 text-xs hover:bg-gray-50">
-                      Mark investigating
-                    </button>
-                    <button onClick={() => updateStatus(inc.id, 'RESOLVED')} className="rounded-md border px-3 py-1 text-xs hover:bg-gray-50">
-                      Mark resolved
-                    </button>
+                    {inc.status !== 'INVESTIGATING' && (
+                      <button onClick={() => updateStatus(inc.id, 'INVESTIGATING')} className="rounded-md border px-3 py-1 text-xs hover:bg-gray-50">
+                        Mark investigating
+                      </button>
+                    )}
+                    {inc.status !== 'RESOLVED' && (
+                      <button onClick={() => updateStatus(inc.id, 'RESOLVED')} className="rounded-md border px-3 py-1 text-xs hover:bg-gray-50">
+                        Mark resolved
+                      </button>
+                    )}
+                    {inc.status === 'RESOLVED' && (
+                      <button onClick={() => updateStatus(inc.id, 'OPEN')} className="rounded-md border px-3 py-1 text-xs hover:bg-gray-50">
+                        Reopen
+                      </button>
+                    )}
                   </div>
                   <p className="mb-2 text-xs font-medium text-gray-500">Alerts in this incident:</p>
                   <ul className="space-y-2">
@@ -109,8 +151,10 @@ function IncidentsContent() {
               )}
             </div>
           ))}
-          {incidents.length === 0 && (
-            <div className="rounded-lg border bg-white p-6 text-center text-gray-400 shadow-sm">No incidents yet.</div>
+          {visibleIncidents.length === 0 && (
+            <div className="rounded-lg border bg-white p-6 text-center text-gray-400 shadow-sm">
+              No {activeTab.toLowerCase()} incidents.
+            </div>
           )}
         </div>
       </div>
