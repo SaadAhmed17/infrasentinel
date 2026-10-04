@@ -2,6 +2,7 @@ import {
   Injectable,
   ConflictException,
   BadRequestException,
+  ServiceUnavailableException,
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -249,6 +250,17 @@ export class AuthService {
             `Failed to send password reset email to ${user.email}: ${err}`,
           ),
         );
+    }
+
+    // Without SMTP no email can be sent to anyone, so say so instead of
+    // "a link has been sent". The answer doesn't depend on the email address.
+    if (!this.mailService.isConfigured()) {
+      throw new ServiceUnavailableException(
+        process.env.NODE_ENV === 'production'
+          ? 'Password reset emails are not available right now. Please contact your administrator.'
+          : 'Password reset emails are not set up on this server yet (SMTP settings are missing in apps/api/.env), so no email was sent. ' +
+              'For an existing account the reset link is printed in the API terminal.',
+      );
     }
 
     // Same answer whether or not the account exists, so emails can't be enumerated.

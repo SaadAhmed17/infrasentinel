@@ -1,11 +1,46 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
 
 @Injectable()
-export class MailService {
+export class MailService implements OnApplicationBootstrap {
   private readonly logger = new Logger(MailService.name);
   private transporter: Transporter | null | undefined;
+
+  isConfigured(): boolean {
+    return Boolean(process.env.SMTP_HOST);
+  }
+
+  // Check the SMTP settings once at startup, so a wrong host or password shows
+  // up in the API terminal instead of reset emails silently never arriving.
+  // Not awaited: an unreachable mail server must not delay the API's start.
+  onApplicationBootstrap() {
+    void this.verifyConnection();
+  }
+
+  async verifyConnection(): Promise<boolean> {
+    const transporter = this.getTransporter();
+    if (!transporter) {
+      this.logger.warn(
+        'SMTP is not configured (SMTP_HOST in apps/api/.env), so password reset emails cannot be sent.',
+      );
+      return false;
+    }
+    const server = `${process.env.SMTP_HOST}:${process.env.SMTP_PORT || 587}`;
+    try {
+      await transporter.verify();
+      this.logger.log(
+        `SMTP ready: ${server} as ${process.env.SMTP_USER ?? '(no login)'}`,
+      );
+      return true;
+    } catch (err) {
+      this.logger.error(
+        `SMTP check failed for ${server}: ${err instanceof Error ? err.message : String(err)}. ` +
+          'Check SMTP_HOST, SMTP_PORT, SMTP_USER and SMTP_PASS in apps/api/.env (Gmail needs an app password, not the normal password).',
+      );
+      return false;
+    }
+  }
 
   // Created on first use from the SMTP_* settings in .env; null when SMTP is not configured.
   private getTransporter(): Transporter | null {
