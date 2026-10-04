@@ -21,7 +21,13 @@ export class AnomalyService {
     try {
       const response = await fetch(
         `${this.aiServiceUrl}/anomaly-score/${serverId}`,
+        {
+          headers: {
+            'x-internal-secret': process.env.AI_SERVICE_SHARED_SECRET ?? '',
+          },
+        },
       );
+
       if (!response.ok) {
         this.logger.warn(
           `AI service returned ${response.status} for server ${serverId}`,

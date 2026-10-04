@@ -50,7 +50,13 @@ export class OrganizationsController {
     @Param('userId') userId: string,
     @Body('role') role: Role,
   ) {
-    return this.orgService.updateMemberRole(user.organizationId, userId, role);
+    return this.orgService.updateMemberRole(
+      user.organizationId,
+      user.userId,
+      user.role,
+      userId,
+      role,
+    );
   }
 
   @Post('invitations')

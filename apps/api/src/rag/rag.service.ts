@@ -27,7 +27,9 @@ export class RagService {
   ): Promise<RagQueryResponse> {
     const response = await fetch(`${this.aiServiceUrl}/rag/query`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'x-internal-secret': process.env.AI_SERVICE_SHARED_SECRET ?? '',
+      },
       body: JSON.stringify({ organizationId, question }),
     });
 
@@ -42,7 +44,9 @@ export class RagService {
   async reindex(organizationId: string): Promise<RagReindexResponse> {
     const response = await fetch(`${this.aiServiceUrl}/rag/reindex`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'x-internal-secret': process.env.AI_SERVICE_SHARED_SECRET ?? '',
+      },
       body: JSON.stringify({ organizationId }),
     });
 
@@ -61,7 +65,9 @@ export class RagService {
     try {
       await fetch(`${this.aiServiceUrl}/rag/index-incident`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'x-internal-secret': process.env.AI_SERVICE_SHARED_SECRET ?? '',
+        },
         body: JSON.stringify({ incidentId, organizationId }),
       });
     } catch (err) {

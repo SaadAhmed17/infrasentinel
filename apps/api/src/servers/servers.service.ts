@@ -135,4 +135,20 @@ export class ServersService {
 
     return { deleted: true, serverId };
   }
+
+  async regenerateApiKey(organizationId: string, serverId: string) {
+    const server = await this.prisma.server.findFirst({
+      where: { id: serverId, organizationId },
+    });
+    if (!server) throw new NotFoundException('Server not found');
+
+    const newApiKey = `isk_${crypto.randomBytes(24).toString('hex')}`;
+
+    await this.prisma.server.update({
+      where: { id: serverId },
+      data: { apiKey: newApiKey },
+    });
+
+    return { apiKey: newApiKey }; // shown once, same pattern as creation
+  }
 }

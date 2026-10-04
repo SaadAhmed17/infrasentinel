@@ -2,11 +2,11 @@ import {
   Injectable,
   ForbiddenException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
-import { Role } from '@prisma/client';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -37,18 +37,62 @@ export class OrganizationsService {
 
   async updateMemberRole(
     organizationId: string,
+    actingUserId: string,
+    actingUserRole: string,
     targetUserId: string,
-    newRole: Role,
+    newRole: string,
   ) {
+    const validRoles = [
+      'OWNER',
+      'ADMIN',
+      'SECURITY_ANALYST',
+      'DEVOPS_ENGINEER',
+      'DEVELOPER',
+      'VIEWER',
+    ];
+    if (!validRoles.includes(newRole)) {
+      throw new BadRequestException('Invalid role');
+    }
+
     const targetUser = await this.prisma.user.findFirst({
       where: { id: targetUserId, organizationId },
     });
     if (!targetUser)
       throw new NotFoundException('User not found in this organization');
 
+    // Only an OWNER can grant OWNER, or change an existing OWNER's role —
+    // otherwise an ADMIN could silently promote themselves (or anyone) to OWNER.
+    const involvesOwnerRole =
+      newRole === 'OWNER' || targetUser.role === 'OWNER';
+    if (involvesOwnerRole && actingUserRole !== 'OWNER') {
+      throw new ForbiddenException(
+        'Only an organization Owner can grant or change the Owner role',
+      );
+    }
+
+    // An org must always retain at least one OWNER — block demoting the last one.
+    if (targetUser.role === 'OWNER' && newRole !== 'OWNER') {
+      const ownerCount = await this.prisma.user.count({
+        where: { organizationId, role: 'OWNER' },
+      });
+      if (ownerCount <= 1) {
+        throw new BadRequestException(
+          "Cannot change the last remaining Owner's role — promote another member to Owner first",
+        );
+      }
+    }
+
     return this.prisma.user.update({
       where: { id: targetUserId },
-      data: { role: newRole },
+      data: {
+        role: newRole as
+          | 'OWNER'
+          | 'ADMIN'
+          | 'SECURITY_ANALYST'
+          | 'DEVOPS_ENGINEER'
+          | 'DEVELOPER'
+          | 'VIEWER',
+      },
       select: { id: true, email: true, role: true },
     });
   }

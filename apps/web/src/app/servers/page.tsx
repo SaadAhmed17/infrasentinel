@@ -192,6 +192,17 @@ function ServersContent() {
                       >
                         Delete
                       </button>
+                      <button
+                      onClick={async () => {
+                      if (confirm(`Regenerate API key for "${s.name}"? The old key will stop working immediately.`)) {
+                      const result = await apiClient.post<{ apiKey: string }>(`/servers/${s.id}/regenerate-key`, {});
+                      setNewApiKey(result.apiKey);
+                    }
+                  }}
+                      className="rounded-md border border-yellow-200 px-2 py-1 text-xs text-yellow-700 hover:bg-yellow-50"
+                       >
+                      Regenerate Key
+                     </button>
                     </div>
                   </td>
                 </tr>

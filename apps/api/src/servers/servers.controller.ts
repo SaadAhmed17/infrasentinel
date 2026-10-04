@@ -69,4 +69,14 @@ export class ServersController {
   ) {
     return this.serversService.deleteServer(user.organizationId, id);
   }
+
+  @Post(':id/regenerate-key')
+  @UseGuards(RolesGuard)
+  @Roles('OWNER', 'ADMIN', 'DEVOPS_ENGINEER')
+  regenerateApiKey(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.serversService.regenerateApiKey(user.organizationId, id);
+  }
 }
