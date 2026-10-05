@@ -12,6 +12,7 @@ export const KNOWN_EVENT_TYPES = [
   'SSH_LOGIN_FAILURE',
   'SSH_LOGIN_SUCCESS',
   'SUDO_COMMAND',
+  'API_REQUEST',
 ] as const;
 
 // Metadata fields those events carry, so they can be used to group events.

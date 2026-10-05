@@ -57,6 +57,7 @@ const EVENT_TYPES = [
   { value: 'SSH_LOGIN_FAILURE', label: 'SSH login failed' },
   { value: 'SSH_LOGIN_SUCCESS', label: 'SSH login succeeded' },
   { value: 'SUDO_COMMAND', label: 'Sudo command' },
+  { value: 'API_REQUEST', label: 'API request' },
   { value: 'AUTH_PASSWORD_RESET_REQUESTED', label: 'Password reset requested' },
   { value: 'AUTH_PASSWORD_RESET_COMPLETED', label: 'Password reset completed' },
 ];
@@ -140,6 +141,7 @@ function RulesContent() {
     { label: 'Web Login Brute-Force', ruleType: 'EVENT_FREQUENCY', eventType: 'AUTH_LOGIN_FAILURE', groupByField: 'ipAddress', maxCount: '10', windowSeconds: '300', severity: 'HIGH' },
     { label: 'High CPU', ruleType: 'METRIC_THRESHOLD', metricField: 'CPU_USAGE', operator: 'GREATER_THAN', threshold: '85', durationSeconds: '60', severity: 'HIGH' },
     { label: 'Service Crash', ruleType: 'HEARTBEAT_MISSING', durationSeconds: '30', severity: 'CRITICAL' },
+    { label: 'API Flood', ruleType: 'EVENT_FREQUENCY', eventType: 'API_REQUEST', groupByField: 'ipAddress', maxCount: '100', windowSeconds: '60', severity: 'HIGH' },
   ];
 
   useEffect(() => {

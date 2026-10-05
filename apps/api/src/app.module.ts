@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -10,6 +10,7 @@ import { RulesModule } from './rules/rules.module';
 import { IncidentsModule } from './incidents/incidents.module';
 import { AnomalyModule } from './anomaly/anomaly.module';
 import { RagModule } from './rag/rag.module';
+import { ApiUsageMiddleware } from './events/api-usage.middleware';
 
 @Module({
   imports: [
@@ -26,4 +27,9 @@ import { RagModule } from './rag/rag.module';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  // Logs user API requests as events so rules can detect API abuse.
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(ApiUsageMiddleware).forRoutes('{*path}');
+  }
+}
