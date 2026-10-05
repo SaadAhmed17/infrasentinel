@@ -1,0 +1,201 @@
+"""Training and inference tests (ML-TRN-xxx, ML-INF-xxx).
+
+A small model is trained once per test session on synthetic healthy telemetry,
+using the project's real preprocess.py and train.py (only the epoch count is
+reduced for speed). Inference is then exercised through the real score_server(),
+with the database read replaced by in-memory telemetry.
+"""
+
+import json
+
+import numpy as np
+import pytest
+import torch
+from conftest import normal_telemetry
+from torch import nn
+from torch.utils.data import DataLoader, TensorDataset
+
+import inference
+import preprocess
+import train
+from model import LSTMAutoencoder
+
+SERVER = "srv-under-test"
+
+
+@pytest.fixture(scope="session")
+def trained_dir(tmp_path_factory):
+    artifacts = tmp_path_factory.mktemp("artifacts")
+    torch.manual_seed(0)
+    patch = pytest.MonkeyPatch()
+    patch.setattr(preprocess, "ARTIFACTS_DIR", str(artifacts))
+    patch.setattr(train, "ARTIFACTS_DIR", str(artifacts))
+    patch.setattr(train, "EPOCHS", 15)
+    preprocess.process_server(SERVER, normal_telemetry(1500, seed=1))
+    train.train_one_server(SERVER)
+    patch.undo()
+    return artifacts
+
+
+@pytest.fixture
+def scoring(trained_dir, monkeypatch):
+    """score_server() wired to the trained artifacts and to fake 'recent metrics'."""
+    monkeypatch.setattr(inference, "ARTIFACTS_DIR", str(trained_dir))
+    monkeypatch.setattr(inference, "_model_cache", {})
+
+    def score(recent_df, server_id=SERVER):
+        monkeypatch.setattr(inference, "load_metrics_for_server", lambda _id: recent_df.copy())
+        return inference.score_server(server_id)
+
+    return score
+
+
+def test_ML_TRN_001_training_saves_model_scaler_and_config(trained_dir):
+    out = trained_dir / SERVER
+    config = json.loads((out / "config.json").read_text())
+
+    assert (out / "model.pt").exists() and (out / "scaler.pkl").exists()
+    assert config["window_size"] == 20 and config["num_features"] == 9
+    assert config["anomaly_threshold"] > 0
+
+
+def test_ML_TRN_002_threshold_is_the_95th_percentile_of_validation_error(trained_dir, monkeypatch):
+    monkeypatch.setattr(inference, "ARTIFACTS_DIR", str(trained_dir))
+    monkeypatch.setattr(inference, "_model_cache", {})
+    artifacts = inference.load_server_artifacts(SERVER)
+    val = torch.tensor(np.load(trained_dir / SERVER / "val_sequences.npy"), dtype=torch.float32)
+
+    with torch.no_grad():
+        errors = torch.mean((artifacts["model"](val) - val) ** 2, dim=(1, 2)).numpy()
+
+    assert artifacts["config"]["anomaly_threshold"] == pytest.approx(np.percentile(errors, 95), rel=1e-5)
+
+
+def test_ML_TRN_003_too_little_history_fails_with_a_clear_message(tmp_path, monkeypatch):
+    monkeypatch.setattr(preprocess, "ARTIFACTS_DIR", str(tmp_path))
+    monkeypatch.setattr(train, "ARTIFACTS_DIR", str(tmp_path))
+    monkeypatch.setattr(train, "EPOCHS", 2)
+    preprocess.process_server("tiny", normal_telemetry(60))  # 6 validation rows < one window
+
+    with pytest.raises(ValueError, match="(?i)not enough"):
+        train.train_one_server("tiny")
+
+
+def test_ML_TRN_004_one_untrainable_server_does_not_stop_the_others(tmp_path, monkeypatch):
+    monkeypatch.setattr(preprocess, "ARTIFACTS_DIR", str(tmp_path))
+    monkeypatch.setattr(train, "ARTIFACTS_DIR", str(tmp_path))
+    monkeypatch.setattr(train, "EPOCHS", 2)
+    preprocess.process_server("tiny", normal_telemetry(60))
+    preprocess.process_server("healthy", normal_telemetry(300))
+
+    failures = train.train_all_servers()
+
+    assert list(failures) == ["tiny"]
+    assert (tmp_path / "healthy" / "model.pt").exists()
+
+
+def test_ML_TRN_005_the_saved_model_is_the_best_epoch_not_the_last(tmp_path, monkeypatch):
+    """Training keeps the epoch with the lowest validation loss. The validation
+    period is busier than the training period, so validation loss stops improving
+    and early stopping ends training several epochs after the best one."""
+    monkeypatch.setattr(preprocess, "ARTIFACTS_DIR", str(tmp_path))
+    monkeypatch.setattr(train, "ARTIFACTS_DIR", str(tmp_path))
+    monkeypatch.setattr(train, "EPOCHS", 40)
+    history = normal_telemetry(1500, seed=3)
+    busier = history.index[-150:]
+    history.loc[busier, "cpuUsage"] = (history.loc[busier, "cpuUsage"] + 25).clip(0, 100)
+    torch.manual_seed(0)
+    preprocess.process_server("best-epoch", history)
+    train.train_one_server("best-epoch")
+
+    out = tmp_path / "best-epoch"
+    config = json.loads((out / "config.json").read_text())
+    model = LSTMAutoencoder(num_features=9, window_size=20, hidden_size=32)
+    model.load_state_dict(torch.load(out / "model.pt", weights_only=True))
+    model.eval()
+    val = torch.tensor(np.load(out / "val_sequences.npy"), dtype=torch.float32)
+    with torch.no_grad():  # the same batched loss train.py records as best_val_loss
+        losses = [nn.MSELoss()(model(batch), batch).item() for (batch,) in DataLoader(TensorDataset(val), batch_size=32)]
+
+    assert float(np.mean(losses)) == pytest.approx(config["best_val_loss"], rel=1e-6)
+
+
+def test_ML_INF_007_windows_server_is_trained_and_scored_end_to_end(tmp_path, monkeypatch):
+    """DEF-43 regression: a host that never reports loadAverage works through
+    pre-processing, training and live scoring."""
+    history = normal_telemetry(300, seed=4)
+    history["loadAverage"] = None
+    for module in (preprocess, train, inference):
+        monkeypatch.setattr(module, "ARTIFACTS_DIR", str(tmp_path))
+    monkeypatch.setattr(train, "EPOCHS", 3)
+    monkeypatch.setattr(inference, "_model_cache", {})
+    preprocess.process_server("win-host", history)
+    train.train_one_server("win-host")
+    monkeypatch.setattr(inference, "load_metrics_for_server", lambda _id: history.copy())
+
+    result = inference.score_server("win-host")
+
+    assert "reconstructionError" in result and result["windowSize"] == 20
+
+
+def test_ML_INF_001_server_without_a_model_gets_an_explanatory_error(scoring):
+    result = scoring(normal_telemetry(50), server_id="never-trained")
+
+    assert "No trained model" in result["error"]
+
+
+@pytest.mark.parametrize("rows, has_score", [(19, False), (20, True)], ids=["19 readings", "20 readings"])
+def test_ML_INF_002_scoring_needs_one_full_window_boundary(scoring, rows, has_score):
+    result = scoring(normal_telemetry(rows, seed=7))
+
+    assert ("reconstructionError" in result) is has_score
+
+
+def test_ML_INF_003_healthy_recent_telemetry_is_not_flagged(scoring):
+    result = scoring(normal_telemetry(40, seed=21))
+
+    assert result["isAnomaly"] is False
+    assert result["reconstructionError"] < result["threshold"]
+
+
+def test_ML_INF_004_obvious_resource_attack_is_flagged(scoring):
+    recent = normal_telemetry(40, seed=21)
+    recent.loc[25:, "cpuUsage"] = 99.0
+    recent.loc[25:, "networkOut"] *= 200  # e.g. exfiltration
+    recent.loc[25:, "processCount"] += 400  # e.g. fork bomb / miner workers
+
+    result = scoring(recent)
+
+    assert result["isAnomaly"] is True
+
+
+def test_ML_INF_005_incomplete_rows_are_skipped_not_scored(scoring):
+    recent = normal_telemetry(40, seed=21)
+    recent.loc[39, "networkIn"] = None
+
+    result = scoring(recent)
+
+    assert result["isAnomaly"] is False
+
+
+class _Identity(torch.nn.Module):
+    def forward(self, x):
+        return x
+
+
+@pytest.mark.parametrize(
+    "threshold, expected",
+    [(0.0, False), (-1e-12, True)],
+    ids=["error == threshold -> normal", "error > threshold -> anomaly"],
+)
+def test_ML_INF_006_threshold_boundary_is_strictly_greater_than(trained_dir, monkeypatch, threshold, expected):
+    """An identity 'model' reconstructs perfectly (error == 0), isolating the rule."""
+    monkeypatch.setattr(inference, "ARTIFACTS_DIR", str(trained_dir))
+    monkeypatch.setattr(inference, "_model_cache", {})
+    scaler = inference.load_server_artifacts(SERVER)["scaler"]
+    monkeypatch.setattr(inference, "_model_cache", {
+        SERVER: {"model": _Identity(), "scaler": scaler, "config": {"anomaly_threshold": threshold}},
+    })
+    monkeypatch.setattr(inference, "load_metrics_for_server", lambda _id: normal_telemetry(20))
+
+    assert inference.score_server(SERVER)["isAnomaly"] is expected
