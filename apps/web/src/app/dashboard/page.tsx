@@ -96,6 +96,7 @@ function DashboardContent() {
             <Link href="/rules" className="text-sm text-blue-600 hover:underline">Rules</Link>
             <Link href="/incidents" className="text-sm text-blue-600 hover:underline">Incidents</Link>
             <Link href="/assistant" className="text-sm text-blue-600 hover:underline">Assistant</Link>
+            <Link href="/settings" className="text-sm text-blue-600 hover:underline">Settings</Link>
             <button onClick={logout} className="rounded-md border px-4 py-2 text-sm hover:bg-gray-100">
               Log out
             </button>

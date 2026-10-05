@@ -7,6 +7,7 @@ import { LoginDto } from './dto/login.dto';
 import { UnauthorizedException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { EventsService } from '../events/events.service';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Injectable()
 export class AuthService {
@@ -194,5 +195,25 @@ export class AuthService {
       result.role,
       result.organizationId,
     );
+  }
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('User not found');
+
+    const isCurrentValid = await bcrypt.compare(
+      dto.currentPassword,
+      user.passwordHash,
+    );
+    if (!isCurrentValid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    const newHash = await bcrypt.hash(dto.newPassword, 10);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: newHash },
+    });
+
+    return { success: true };
   }
 }
