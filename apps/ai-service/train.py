@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 
@@ -81,7 +82,9 @@ def train_one_server(server_id: str):
 
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
-            best_model_state = model.state_dict()
+            # A real copy: state_dict() shares memory with the live weights, so
+            # later epochs would overwrite this "best" snapshot.
+            best_model_state = copy.deepcopy(model.state_dict())
             epochs_without_improvement = 0
         else:
             epochs_without_improvement += 1
