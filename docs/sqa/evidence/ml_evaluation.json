@@ -1,0 +1,144 @@
+{
+  "setup": {
+    "training_rows": 3000,
+    "sample_interval_s": 10,
+    "window_size": 20,
+    "test_stream_rows": 1764,
+    "test_windows": 1745,
+    "anomalous_windows": 928,
+    "episodes": 16,
+    "production_threshold": 0.0222141295671463,
+    "best_validation_loss": 0.016916004423465993,
+    "runtime_s": 42.1
+  },
+  "headline_at_production_threshold": {
+    "tp": 806,
+    "fp": 30,
+    "tn": 787,
+    "fn": 122,
+    "precision": 0.9641148325358851,
+    "recall": 0.8685344827586207,
+    "f1": 0.9138321995464852,
+    "false_positive_rate": 0.03671970624235006,
+    "false_alarms_per_server_per_hour": 4.406364749082007
+  },
+  "roc_auc": 0.9581462615540455,
+  "per_scenario": {
+    "cpu_spike": {
+      "scenario": "crypto-miner burst: CPU 95-100% for 1 min",
+      "detected": "2/2",
+      "detection_rate": 1.0,
+      "median_latency_s": 0.0,
+      "window_recall": 1.0
+    },
+    "sustained_cpu": {
+      "scenario": "runaway process: CPU +35 points for 10 min",
+      "detected": "2/2",
+      "detection_rate": 1.0,
+      "median_latency_s": 0.0,
+      "window_recall": 0.9936708860759493
+    },
+    "memory_leak": {
+      "scenario": "memory leak: +0 to +35 points over 15 min",
+      "detected": "2/2",
+      "detection_rate": 1.0,
+      "median_latency_s": 170.0,
+      "window_recall": 0.8440366972477065
+    },
+    "network_flood": {
+      "scenario": "inbound flood (DDoS): network in x40 for 3 min",
+      "detected": "2/2",
+      "detection_rate": 1.0,
+      "median_latency_s": 0.0,
+      "window_recall": 1.0
+    },
+    "exfiltration": {
+      "scenario": "data exfiltration: network out x60 for 3 min",
+      "detected": "2/2",
+      "detection_rate": 1.0,
+      "median_latency_s": 0.0,
+      "window_recall": 1.0
+    },
+    "disk_burst": {
+      "scenario": "ransomware-like I/O: disk write x80, read x20 for 3 min",
+      "detected": "2/2",
+      "detection_rate": 1.0,
+      "median_latency_s": 0.0,
+      "window_recall": 1.0
+    },
+    "fork_bomb": {
+      "scenario": "fork bomb: +600 processes, load +8 for 2 min",
+      "detected": "2/2",
+      "detection_rate": 1.0,
+      "median_latency_s": 0.0,
+      "window_recall": 1.0
+    },
+    "subtle_drift": {
+      "scenario": "subtle drift: CPU +6, memory +4 points for 15 min (hard case)",
+      "detected": "2/2",
+      "detection_rate": 1.0,
+      "median_latency_s": 120.0,
+      "window_recall": 0.6009174311926605
+    }
+  },
+  "static_cpu_rule_baseline": {
+    "cpu_spike": "2/2",
+    "sustained_cpu": "0/2",
+    "memory_leak": "0/2",
+    "network_flood": "0/2",
+    "exfiltration": "0/2",
+    "disk_burst": "0/2",
+    "fork_bomb": "0/2",
+    "subtle_drift": "0/2"
+  },
+  "threshold_tradeoff": [
+    {
+      "percentile": 90,
+      "threshold": 0.021021444350481033,
+      "precision": 0.9157427937915743,
+      "recall": 0.8900862068965517,
+      "f1": 0.9027322404371585,
+      "false_positive_rate": 0.09302325581395349
+    },
+    {
+      "percentile": 95,
+      "threshold": 0.0222141295671463,
+      "precision": 0.9641148325358851,
+      "recall": 0.8685344827586207,
+      "f1": 0.9138321995464852,
+      "false_positive_rate": 0.03671970624235006
+    },
+    {
+      "percentile": 97.5,
+      "threshold": 0.02271006442606449,
+      "precision": 0.9692874692874693,
+      "recall": 0.8502155172413793,
+      "f1": 0.9058553386911596,
+      "false_positive_rate": 0.030599755201958383
+    },
+    {
+      "percentile": 99,
+      "threshold": 0.02356167882680893,
+      "precision": 0.9868766404199475,
+      "recall": 0.8103448275862069,
+      "f1": 0.8899408284023669,
+      "false_positive_rate": 0.012239902080783354
+    },
+    {
+      "percentile": 99.5,
+      "threshold": 0.024181082844734192,
+      "precision": 0.9918588873812755,
+      "recall": 0.7877155172413793,
+      "f1": 0.8780780780780781,
+      "false_positive_rate": 0.0073439412484700125
+    },
+    {
+      "percentile": 99.9,
+      "threshold": 0.024427346885204315,
+      "precision": 0.9958791208791209,
+      "recall": 0.78125,
+      "f1": 0.8756038647342995,
+      "false_positive_rate": 0.0036719706242350062
+    }
+  ]
+}
