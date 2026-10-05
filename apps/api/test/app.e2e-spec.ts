@@ -1,29 +1,29 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
-import request from 'supertest';
-import { App } from 'supertest/types';
-import { AppModule } from './../src/app.module';
+import { createTestApp, request, TestApp } from './helpers/test-app';
 
-describe('AppController (e2e)', () => {
-  let app: INestApplication<App>;
+// Smoke test: the full application boots on Fastify against a migrated database
+// and answers HTTP requests. If this fails, every other integration result is void.
+describe('Application smoke test (e2e)', () => {
+  let t: TestApp;
 
-  beforeEach(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    await app.init();
+  beforeAll(async () => {
+    t = await createTestApp();
   });
 
-  it('/ (GET)', () => {
-    return request(app.getHttpServer())
-      .get('/')
-      .expect(200)
-      .expect('Hello World!');
+  afterAll(async () => {
+    await t.close();
   });
 
-  afterEach(async () => {
-    await app.close();
+  it('GET / responds 200 with the service greeting', async () => {
+    const res = await request(t.app, 'GET', '/');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toBe('Hello World!');
+  });
+
+  it('the database schema is migrated (pgvector extension installed)', async () => {
+    const rows = await t.prisma.$queryRaw<{ extname: string }[]>`
+      SELECT extname FROM pg_extension WHERE extname = 'vector'`;
+
+    expect(rows).toHaveLength(1);
   });
 });

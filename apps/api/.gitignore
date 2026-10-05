@@ -3,3 +3,6 @@ node_modules
 .env
 
 /generated/prisma
+
+# Test coverage reports (generated)
+coverage/

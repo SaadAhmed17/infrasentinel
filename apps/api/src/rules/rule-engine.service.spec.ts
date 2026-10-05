@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { RuleEngineService } from './rule-engine.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AnomalyService } from '../anomaly/anomaly.service';
-import { beforeEach, describe, it } from 'node:test';
 
 describe('RuleEngineService', () => {
   let service: RuleEngineService;
@@ -13,6 +12,26 @@ describe('RuleEngineService', () => {
     metric: { findMany: jest.Mock };
     event: { findMany: jest.Mock };
     incident: { create: jest.Mock };
+  };
+
+  // CPU readings every 10 s covering the whole 60 s window, all breaching,
+  // so the breach counts as sustained for the rule's duration.
+  const sustainedBreach = () =>
+    [55, 45, 35, 25, 15, 5].map((secondsAgo) => ({
+      cpuUsage: 95,
+      memUsage: 50,
+      diskUsage: 50,
+      timestamp: new Date(Date.now() - secondsAgo * 1000),
+    }));
+
+  const cpuRule = {
+    id: 'rule-1',
+    organizationId: 'org-1',
+    metricField: 'CPU_USAGE',
+    operator: 'GREATER_THAN',
+    threshold: 80,
+    durationSeconds: 60,
+    severity: 'HIGH',
   };
 
   beforeEach(async () => {
@@ -41,24 +60,31 @@ describe('RuleEngineService', () => {
     expect(prisma.alert.create).not.toHaveBeenCalled();
   });
 
-  it('does not create a duplicate alert if one is already OPEN for the same rule and server', async () => {
-    prisma.rule.findMany.mockResolvedValueOnce([
-      {
-        id: 'rule-1',
-        organizationId: 'org-1',
-        metricField: 'CPU_USAGE',
-        operator: 'GREATER_THAN',
-        threshold: 80,
-        durationSeconds: 60,
-        severity: 'HIGH',
-      },
-    ]);
+  // Positive control for the de-duplication test below: without it, that test
+  // would still pass if the engine never created any alert at all.
+  it('creates an alert when every reading breaches and none is already OPEN', async () => {
+    prisma.rule.findMany.mockResolvedValueOnce([cpuRule]);
     prisma.server.findMany.mockResolvedValue([
       { id: 'server-1', name: 'Test Server', organizationId: 'org-1' },
     ]);
-    prisma.metric.findMany.mockResolvedValue([
-      { cpuUsage: 95, memUsage: 50, diskUsage: 50, timestamp: new Date() },
+    prisma.metric.findMany.mockResolvedValue(sustainedBreach());
+    prisma.alert.findFirst.mockResolvedValue(null);
+
+    await service.evaluateRules();
+
+    expect(prisma.alert.create).toHaveBeenCalledTimes(1);
+    const [[createArgs]] = prisma.alert.create.mock.calls as [[unknown]];
+    expect(createArgs).toMatchObject({
+      data: { ruleId: 'rule-1', serverId: 'server-1', status: 'OPEN' },
+    });
+  });
+
+  it('does not create a duplicate alert if one is already OPEN for the same rule and server', async () => {
+    prisma.rule.findMany.mockResolvedValueOnce([cpuRule]);
+    prisma.server.findMany.mockResolvedValue([
+      { id: 'server-1', name: 'Test Server', organizationId: 'org-1' },
     ]);
+    prisma.metric.findMany.mockResolvedValue(sustainedBreach());
     prisma.alert.findFirst.mockResolvedValue({ id: 'existing-alert' }); // simulate an alert already OPEN
 
     await service.evaluateRules();

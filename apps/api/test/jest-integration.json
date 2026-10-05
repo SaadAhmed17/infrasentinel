@@ -1,0 +1,23 @@
+{
+  "displayName": "integration",
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "..",
+  "roots": ["<rootDir>/test"],
+  "testEnvironment": "node",
+  "testRegex": "\\.(int|e2e)-spec\\.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "globalSetup": "<rootDir>/test/setup/global-setup.ts",
+  "globalTeardown": "<rootDir>/test/setup/global-teardown.ts",
+  "setupFiles": ["<rootDir>/test/setup/env.ts"],
+  "setupFilesAfterEnv": ["<rootDir>/test/setup/disable-scheduler.ts"],
+  "collectCoverageFrom": [
+    "src/**/*.ts",
+    "!src/main.ts",
+    "!src/**/*.module.ts",
+    "!src/**/*.spec.ts"
+  ],
+  "coverageDirectory": "coverage/integration",
+  "testTimeout": 30000
+}

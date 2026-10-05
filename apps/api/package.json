@@ -17,7 +17,9 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:e2e": "jest --config ./test/jest-integration.json --runInBand",
+    "test:integration": "jest --config ./test/jest-integration.json --runInBand",
+    "test:all": "jest && jest --config ./test/jest-integration.json --runInBand",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -38,6 +40,9 @@
     "rxjs": "^7.8.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "@electric-sql/pglite-pgvector": "0.0.9",
+    "@electric-sql/pglite-socket": "0.2.11",
     "@eslint/eslintrc": "^3.2.0",
     "@eslint/js": "^9.18.0",
     "@nestjs/cli": "^11.0.0",
@@ -78,9 +83,15 @@
       "^.+\\.(t|j)s$": "ts-jest"
     },
     "collectCoverageFrom": [
-      "**/*.(t|j)s"
+      "**/*.(t|j)s",
+      "!main.ts",
+      "!**/*.module.ts"
     ],
-    "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "coverageDirectory": "../coverage/unit",
+    "testEnvironment": "node",
+    "displayName": "unit",
+    "setupFiles": [
+      "<rootDir>/../test/setup/env.ts"
+    ]
   }
 }

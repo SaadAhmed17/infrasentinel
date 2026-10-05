@@ -25,7 +25,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['**/*.spec.ts'],
+    files: ['**/*.spec.ts', 'test/**/*.ts'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-floating-promises': 'off',

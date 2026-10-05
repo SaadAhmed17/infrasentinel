@@ -15,3 +15,6 @@ apps/agent/.env.server1
 apps/agent/.env.server2
 apps/agent/.env.server3
 apps/ai-service/artifacts/
+# Python test coverage data
+.coverage
+htmlcov/
