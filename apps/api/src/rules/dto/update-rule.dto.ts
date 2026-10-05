@@ -1,6 +1,9 @@
 import {
   IsEnum,
   IsIn,
+  IsInt,
+  Max,
+  MaxLength,
   IsNotEmpty,
   IsNumber,
   IsString,
@@ -62,6 +65,24 @@ export class UpdateRuleDto {
   @IsNumber()
   @Min(1)
   windowSeconds?: number;
+
+  // Unusual-access fields (only used when ruleType = UNUSUAL_ACCESS)
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  approvedUsernames?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(23)
+  businessHourStartUTC?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(23)
+  businessHourEndUTC?: number;
 
   @IsOptional()
   @IsEnum(Severity)

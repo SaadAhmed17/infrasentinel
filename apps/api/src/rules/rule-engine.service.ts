@@ -289,6 +289,90 @@ export class RuleEngineService {
     for (const rule of activeAnomalyRules) {
       await this.evaluateSafely(rule, () => this.evaluateAnomalyRule(rule));
     }
+
+    const activeUnusualAccessRules = await this.prisma.rule.findMany({
+      where: { ruleType: 'UNUSUAL_ACCESS', isActive: true },
+    });
+    for (const rule of activeUnusualAccessRules) {
+      await this.evaluateSafely(rule, () =>
+        this.evaluateUnusualAccessRule(rule),
+      );
+    }
+  }
+
+  // Sudo by a user who is not on the approved list, or outside business hours.
+  // Each sudo event is reported at most once, even after its incident is resolved.
+  private async evaluateUnusualAccessRule(rule: {
+    id: string;
+    organizationId: string;
+    approvedUsernames: string | null;
+    businessHourStartUTC: number | null;
+    businessHourEndUTC: number | null;
+  }) {
+    const approved = (rule.approvedUsernames ?? '')
+      .split(',')
+      .map((u) => u.trim())
+      .filter(Boolean);
+    const hasHours =
+      rule.businessHourStartUTC !== null && rule.businessHourEndUTC !== null;
+    if (approved.length === 0 && !hasHours) return;
+
+    // Look back 5 minutes each tick (the tick runs every 30 s).
+    const windowStart = new Date(Date.now() - 5 * 60 * 1000);
+    const sudoEvents = await this.prisma.event.findMany({
+      where: {
+        eventType: 'SUDO_COMMAND',
+        createdAt: { gte: windowStart },
+        organizationId: rule.organizationId, // tenant's own events only
+      },
+    });
+
+    for (const event of sudoEvents) {
+      const metadata = event.metadata as Record<string, unknown>;
+      const username = metadata.username;
+      if (typeof username !== 'string') continue;
+
+      const unapprovedUser =
+        approved.length > 0 && !approved.includes(username);
+      const hour = event.createdAt.getUTCHours();
+      const outsideHours =
+        hasHours &&
+        (hour < rule.businessHourStartUTC! || hour >= rule.businessHourEndUTC!);
+      if (!unapprovedUser && !outsideHours) continue;
+
+      const alreadyReported = await this.prisma.alert.findFirst({
+        where: {
+          ruleId: rule.id,
+          details: { path: ['eventId'], equals: event.id },
+        },
+        select: { id: true },
+      });
+      if (alreadyReported) continue;
+
+      const reason = unapprovedUser
+        ? 'unapproved_user'
+        : 'outside_business_hours';
+      await this.prisma.alert.create({
+        data: {
+          ruleId: rule.id,
+          serverId: await this.serverOfEvents([event], rule.organizationId),
+          details: {
+            eventId: event.id,
+            username,
+            reason,
+            command:
+              typeof metadata.command === 'string' ? metadata.command : null,
+            outcome:
+              typeof metadata.outcome === 'string' ? metadata.outcome : null,
+          },
+          status: 'OPEN',
+        },
+      });
+
+      this.logger.warn(
+        `Alert created: unusual sudo access by "${username}" (${reason}) (rule "${rule.id}")`,
+      );
+    }
   }
 
   // One failing rule (bad data, a database hiccup) must not stop the others.

@@ -91,8 +91,16 @@ export class ServersService {
       eventType: dto.eventType,
       source: 'ssh-log-agent',
       severity: dto.outcome === 'FAILURE' ? 'WARNING' : 'INFO',
-      message: `SSH ${dto.outcome} for user "${dto.username}" from ${dto.ipAddress}`,
-      metadata: { username: dto.username, ipAddress: dto.ipAddress, serverId },
+      message: dto.command
+        ? `${dto.eventType} (${dto.outcome}) by "${dto.username}": ${dto.command}`
+        : `SSH ${dto.outcome} for user "${dto.username}" from ${dto.ipAddress}`,
+      metadata: {
+        username: dto.username,
+        ipAddress: dto.ipAddress,
+        serverId,
+        outcome: dto.outcome,
+        ...(dto.command && { command: dto.command }),
+      },
       organizationId,
     });
   }

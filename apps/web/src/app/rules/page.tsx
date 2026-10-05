@@ -21,6 +21,9 @@ interface Rule {
   groupByField: string | null;
   maxCount: number | null;
   windowSeconds: number | null;
+  approvedUsernames: string | null;
+  businessHourStartUTC: number | null;
+  businessHourEndUTC: number | null;
   severity: string;
   isActive: boolean;
 }
@@ -31,6 +34,7 @@ const RULE_TYPES = [
   { value: 'HEARTBEAT_MISSING', label: 'Heartbeat Missing (e.g. service crash)' },
   { value: 'CREDENTIAL_STUFFING', label: 'Credential Stuffing (multi-IP failures then success)' },
   { value: 'ANOMALY_DETECTION', label: 'AI Anomaly Detection (LSTM-Autoencoder)' },
+  { value: 'UNUSUAL_ACCESS', label: 'Unusual Access (sudo by unapproved users or out of hours)' },
 ];
 
 const METRIC_FIELDS = [
@@ -52,6 +56,7 @@ const EVENT_TYPES = [
   { value: 'AUTH_LOGIN_SUCCESS', label: 'Web login succeeded' },
   { value: 'SSH_LOGIN_FAILURE', label: 'SSH login failed' },
   { value: 'SSH_LOGIN_SUCCESS', label: 'SSH login succeeded' },
+  { value: 'SUDO_COMMAND', label: 'Sudo command' },
   { value: 'AUTH_PASSWORD_RESET_REQUESTED', label: 'Password reset requested' },
   { value: 'AUTH_PASSWORD_RESET_COMPLETED', label: 'Password reset completed' },
 ];
@@ -87,6 +92,13 @@ function describeCondition(r: Rule) {
       return `${r.maxCount}+ distinct IPs failing then succeeding, within ${r.windowSeconds}s`;
     case 'ANOMALY_DETECTION':
       return 'LSTM reconstruction error exceeds per-server threshold';
+    case 'UNUSUAL_ACCESS':
+      return [
+        r.approvedUsernames ? `sudo by anyone except ${r.approvedUsernames}` : null,
+        r.businessHourStartUTC !== null ? `sudo outside ${r.businessHourStartUTC}:00-${r.businessHourEndUTC}:00 UTC` : null,
+      ]
+        .filter(Boolean)
+        .join('; or ');
     default:
       return '—';
   }
@@ -112,6 +124,9 @@ function RulesContent() {
   const [groupByField, setGroupByField] = useState('ipAddress');
   const [maxCount, setMaxCount] = useState('5');
   const [windowSeconds, setWindowSeconds] = useState('600');
+  const [approvedUsernames, setApprovedUsernames] = useState('');
+  const [businessHourStart, setBusinessHourStart] = useState('9');
+  const [businessHourEnd, setBusinessHourEnd] = useState('18');
   const [severity, setSeverity] = useState('MEDIUM');
   const [saving, setSaving] = useState(false);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
@@ -146,6 +161,14 @@ function RulesContent() {
         payload = { ...payload, durationSeconds: Number(durationSeconds) };
       } else if (ruleType === 'CREDENTIAL_STUFFING') {
         payload = { ...payload, windowSeconds: Number(windowSeconds), maxCount: Number(maxCount) };
+      } else if (ruleType === 'UNUSUAL_ACCESS') {
+        // Empty fields are sent as null so they can also be cleared when editing.
+        payload = {
+          ...payload,
+          approvedUsernames: approvedUsernames.trim() || null,
+          businessHourStartUTC: businessHourStart === '' ? null : Number(businessHourStart),
+          businessHourEndUTC: businessHourEnd === '' ? null : Number(businessHourEnd),
+        };
       }
 
       if (editingRuleId) {
@@ -196,6 +219,9 @@ function RulesContent() {
     setGroupByField(r.groupByField ?? 'ipAddress');
     setMaxCount(String(r.maxCount ?? '5'));
     setWindowSeconds(String(r.windowSeconds ?? '600'));
+    setApprovedUsernames(r.approvedUsernames ?? '');
+    setBusinessHourStart(r.businessHourStartUTC === null ? '' : String(r.businessHourStartUTC));
+    setBusinessHourEnd(r.businessHourEndUTC === null ? '' : String(r.businessHourEndUTC));
     setSeverity(r.severity);
     setShowForm(true);
   }
@@ -352,6 +378,28 @@ function RulesContent() {
               <div>
                 <label className={labelClass}>Window (seconds)</label>
                 <input type="number" value={windowSeconds} onChange={(e) => setWindowSeconds(e.target.value)} className={inputClass} />
+              </div>
+            </div>
+          )}
+
+          {ruleType === 'UNUSUAL_ACCESS' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className={labelClass}>Approved sudo users (comma-separated, empty = anyone)</label>
+                <input
+                  value={approvedUsernames}
+                  onChange={(e) => setApprovedUsernames(e.target.value)}
+                  placeholder="saad, hashim"
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Business hours start (UTC hour 0-23, empty = any time)</label>
+                <input type="number" min={0} max={23} value={businessHourStart} onChange={(e) => setBusinessHourStart(e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Business hours end (UTC hour 0-23)</label>
+                <input type="number" min={0} max={23} value={businessHourEnd} onChange={(e) => setBusinessHourEnd(e.target.value)} className={inputClass} />
               </div>
             </div>
           )}

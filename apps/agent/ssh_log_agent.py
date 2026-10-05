@@ -13,6 +13,10 @@ AUTH_LOG_PATH = "/var/log/auth.log"
 FAILED_PATTERN = re.compile(
     r"Failed password for (invalid user )?(\S+) from (\S+)")
 ACCEPTED_PATTERN = re.compile(r"Accepted password for (\S+) from (\S+)")
+# e.g. "sudo:    alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/bin/ls"
+SUDO_PATTERN = re.compile(r"sudo:\s+(\S+)\s*:.*COMMAND=(.+)")
+# sudo also logs refused attempts with COMMAND=; these were not executed.
+SUDO_REFUSED_MARKERS = ("incorrect password attempt", "NOT in sudoers", "command not allowed")
 
 
 def push_event(outcome, username, ip_address):
@@ -32,6 +36,35 @@ def push_event(outcome, username, ip_address):
         print(f"[OK] Pushed SSH {outcome}: user={username} ip={ip_address}")
     except requests.exceptions.RequestException as e:
         print(f"[ERROR] Failed to push SSH event: {e}")
+
+
+def push_sudo_event(outcome, username, command):
+    try:
+        response = requests.post(
+            f"{API_URL}/agent/log-event",
+            json={
+                "eventType": "SUDO_COMMAND",
+                "outcome": outcome,
+                "username": username,
+                "ipAddress": "local",
+                "command": command.strip(),
+            },
+            headers={"x-api-key": API_KEY},
+            timeout=5,
+        )
+        response.raise_for_status()
+        print(f"[OK] Pushed sudo {outcome}: user={username} cmd={command.strip()}")
+    except requests.exceptions.RequestException as e:
+        print(f"[ERROR] Failed to push sudo event: {e}")
+
+
+def parse_sudo_line(line):
+    """Returns (outcome, username, command) for a sudo log line, or None."""
+    match = SUDO_PATTERN.search(line)
+    if not match:
+        return None
+    refused = any(marker in line for marker in SUDO_REFUSED_MARKERS)
+    return ("FAILURE" if refused else "SUCCESS", match.group(1), match.group(2))
 
 
 def tail_auth_log():
@@ -57,6 +90,11 @@ def tail_auth_log():
                 username = accepted_match.group(1)
                 ip = accepted_match.group(2)
                 push_event("SUCCESS", username, ip)
+                continue
+
+            sudo = parse_sudo_line(line)
+            if sudo:
+                push_sudo_event(*sudo)
 
 
 if __name__ == "__main__":

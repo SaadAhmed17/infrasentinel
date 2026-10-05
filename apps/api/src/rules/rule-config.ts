@@ -11,6 +11,7 @@ export const KNOWN_EVENT_TYPES = [
   'AUTH_PASSWORD_RESET_COMPLETED',
   'SSH_LOGIN_FAILURE',
   'SSH_LOGIN_SUCCESS',
+  'SUDO_COMMAND',
 ] as const;
 
 // Metadata fields those events carry, so they can be used to group events.
@@ -31,6 +32,9 @@ type RuleConfig = Pick<
   | 'groupByField'
   | 'maxCount'
   | 'windowSeconds'
+  | 'approvedUsernames'
+  | 'businessHourStartUTC'
+  | 'businessHourEndUTC'
 >;
 
 // Fields the rule engine needs for each rule type; without them the rule is
@@ -41,17 +45,40 @@ const REQUIRED_FIELDS: Record<RuleType, (keyof RuleConfig)[]> = {
   CREDENTIAL_STUFFING: ['maxCount', 'windowSeconds'],
   HEARTBEAT_MISSING: [], // durationSeconds has a default
   ANOMALY_DETECTION: [],
+  UNUSUAL_ACCESS: [], // checked below: approved users and/or business hours
 };
+
+const isSet = (value: unknown) => value !== null && value !== undefined;
 
 export function assertRuleIsComplete(
   rule: Partial<RuleConfig> & Pick<RuleConfig, 'ruleType'>,
 ) {
   const missing = REQUIRED_FIELDS[rule.ruleType].filter(
-    (field) => rule[field] === null || rule[field] === undefined,
+    (field) => !isSet(rule[field]),
   );
   if (missing.length > 0) {
     throw new BadRequestException(
       `${rule.ruleType} rules need: ${missing.join(', ')}`,
     );
+  }
+
+  if (rule.ruleType === 'UNUSUAL_ACCESS') {
+    const hasStart = isSet(rule.businessHourStartUTC);
+    const hasEnd = isSet(rule.businessHourEndUTC);
+    if (hasStart !== hasEnd) {
+      throw new BadRequestException(
+        'UNUSUAL_ACCESS rules need both businessHourStartUTC and businessHourEndUTC, or neither',
+      );
+    }
+    if (hasStart && rule.businessHourStartUTC! >= rule.businessHourEndUTC!) {
+      throw new BadRequestException(
+        'businessHourStartUTC must be earlier than businessHourEndUTC',
+      );
+    }
+    if (!rule.approvedUsernames?.trim() && !hasStart) {
+      throw new BadRequestException(
+        'UNUSUAL_ACCESS rules need approvedUsernames, business hours, or both',
+      );
+    }
   }
 }
