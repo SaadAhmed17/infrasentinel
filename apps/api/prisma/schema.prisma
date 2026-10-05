@@ -115,6 +115,7 @@ model Rule {
   organization    Organization        @relation(fields: [organizationId], references: [id])
   alerts          Alert[]
   createdAt       DateTime            @default(now())
+  deletedAt       DateTime?           // set when deleted: hidden and never evaluated, but its alerts stay
 }
 
 enum AlertStatus {

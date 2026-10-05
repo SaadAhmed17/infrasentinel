@@ -16,12 +16,14 @@ export class RulesService {
   }
 
   async listRules(organizationId: string) {
-    return this.prisma.rule.findMany({ where: { organizationId } });
+    return this.prisma.rule.findMany({
+      where: { organizationId, deletedAt: null },
+    });
   }
 
   async toggleRule(organizationId: string, ruleId: string, isActive: boolean) {
     const rule = await this.prisma.rule.findFirst({
-      where: { id: ruleId, organizationId },
+      where: { id: ruleId, organizationId, deletedAt: null },
     });
     if (!rule) throw new NotFoundException('Rule not found');
 
@@ -30,38 +32,24 @@ export class RulesService {
       data: { isActive },
     });
   }
+  // Deleting hides the rule and switches it off, but keeps it in the database
+  // so its alerts and incidents (the security history) stay intact.
   async deleteRule(organizationId: string, ruleId: string) {
     const rule = await this.prisma.rule.findFirst({
-      where: {
-        id: ruleId,
-        organizationId,
-      },
+      where: { id: ruleId, organizationId, deletedAt: null },
+    });
+    if (!rule) throw new NotFoundException('Rule not found');
+
+    await this.prisma.rule.update({
+      where: { id: ruleId },
+      data: { deletedAt: new Date(), isActive: false },
     });
 
-    if (!rule) {
-      throw new NotFoundException('Rule not found');
-    }
-
-    await this.prisma.alert.deleteMany({
-      where: {
-        ruleId,
-      },
-    });
-
-    await this.prisma.rule.delete({
-      where: {
-        id: ruleId,
-      },
-    });
-
-    return {
-      deleted: true,
-      ruleId,
-    };
+    return { deleted: true, ruleId };
   }
   async updateRule(organizationId: string, ruleId: string, dto: UpdateRuleDto) {
     const rule = await this.prisma.rule.findFirst({
-      where: { id: ruleId, organizationId },
+      where: { id: ruleId, organizationId, deletedAt: null },
     });
     if (!rule) throw new NotFoundException('Rule not found');
 

@@ -173,7 +173,7 @@ function RulesContent() {
   }
 
   async function handleDelete(rule: Rule) {
-    if (confirm(`Delete rule "${rule.name}"? This also removes its alert history.`)) {
+    if (confirm(`Delete rule "${rule.name}"? Its past alerts and incidents are kept.`)) {
       setError('');
       try {
         await apiClient.delete(`/rules/${rule.id}`);
