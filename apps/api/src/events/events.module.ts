@@ -6,6 +6,8 @@ import { ApiUsageMiddleware } from './api-usage.middleware';
 @Module({
   imports: [JwtModule.register({})],
   providers: [EventsService, ApiUsageMiddleware],
-  exports: [EventsService, ApiUsageMiddleware],
+  // JwtModule is exported because AppModule applies the middleware, so its
+  // JwtService dependency must be resolvable there.
+  exports: [EventsService, ApiUsageMiddleware, JwtModule],
 })
 export class EventsModule {}
