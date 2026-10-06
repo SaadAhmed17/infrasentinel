@@ -3,19 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, LogOut } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
+import { roleLabel } from '@/lib/roles';
 import { cn } from '@/lib/utils';
 
 function initials(email?: string) {
   if (!email) return '?';
   return email.slice(0, 2).toUpperCase();
-}
-
-function roleLabel(role?: string) {
-  if (!role) return '';
-  return role
-    .split('_')
-    .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
-    .join(' ');
 }
 
 export function ProfileMenu() {

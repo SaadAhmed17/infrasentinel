@@ -1,22 +1,21 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { AlertTriangle, ArrowRight, Check, Copy, ListChecks, Server, UserPlus, WifiOff, X } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { ProtectedRoute } from '@/components/protected-route';
 import { AppShell } from '@/components/app-shell';
 import { apiClient } from '@/lib/api-client';
-import { Badge } from '@/components/ui/badge';
-import {
-  Server,
-  AlertTriangle,
-  ListChecks,
-  WifiOff,
-  UserPlus,
-  X,
-  Copy,
-  ArrowRight,
-  Inbox,
-} from 'lucide-react';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
+import { fieldControlClass, fieldLabelClass, fieldSelectClass } from '@/components/ui/form-styles';
+import { Notice } from '@/components/ui/notice';
+import { Panel } from '@/components/ui/panel';
+import { StatTile } from '@/components/ui/stat-tile';
+import { SeverityBadge } from '@/components/ui/status';
+import { TONE_COLOR } from '@/components/ui/tone';
+import { ROLE_LABELS, roleLabel } from '@/lib/roles';
+import { cn } from '@/lib/utils';
 
 interface Member {
   id: string;
@@ -37,14 +36,11 @@ interface DashboardSummary {
   }[];
 }
 
-const ROLES = ['OWNER', 'ADMIN', 'SECURITY_ANALYST', 'DEVOPS_ENGINEER', 'DEVELOPER', 'VIEWER'];
+const ROLES = Object.keys(ROLE_LABELS);
 
-const SEVERITY_STYLES: Record<string, string> = {
-  CRITICAL: 'border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-400',
-  HIGH: 'border-orange-500/20 bg-orange-500/10 text-orange-600 dark:text-orange-400',
-  MEDIUM: 'border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400',
-  LOW: 'border-border bg-muted text-muted-foreground',
-};
+function formatDate(dateStr: string) {
+  return new Date(dateStr).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
 
 function timeAgo(dateStr: string) {
   const diffMs = Date.now() - new Date(dateStr).getTime();
@@ -54,6 +50,48 @@ function timeAgo(dateStr: string) {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function Skeleton({ className }: { className?: string }) {
+  return <span className={cn('inline-block animate-pulse rounded-md bg-muted align-middle', className)} />;
+}
+
+// One light per server: the fleet at a glance. The summary counts servers that
+// never reported together with offline ones, so both show as "not reporting".
+function FleetLights({ online, notReporting }: { online: number; notReporting: number }) {
+  const lights = [
+    ...Array<string>(online).fill(TONE_COLOR.online),
+    ...Array<string>(notReporting).fill(TONE_COLOR.offline),
+  ];
+  const shown = lights.slice(0, 60);
+  // small fleets get bigger lights
+  const big = lights.length <= 16;
+  return (
+    <div
+      className={cn('flex flex-wrap', big ? 'gap-2' : 'gap-1.5')}
+      role="img"
+      aria-label={`${online} online, ${notReporting} not reporting`}
+    >
+      {shown.map((color, i) => (
+        <span
+          key={i}
+          className={cn('flex items-center justify-center border', big ? 'size-9 rounded-md' : 'size-4 rounded-[3px]')}
+          style={{
+            background: `color-mix(in oklab, ${color} 14%, transparent)`,
+            borderColor: `color-mix(in oklab, ${color} 45%, transparent)`,
+          }}
+        >
+          <span
+            className={cn(big ? 'size-3 rounded-[2px]' : 'size-1.5 rounded-[1px]')}
+            style={{ background: color, boxShadow: `0 0 10px color-mix(in oklab, ${color} 60%, transparent)` }}
+          />
+        </span>
+      ))}
+      {lights.length > shown.length && (
+        <span className="self-center font-mono text-[12px] text-muted-foreground">+{lights.length - shown.length}</span>
+      )}
+    </div>
+  );
 }
 
 function DashboardContent() {
@@ -123,298 +161,255 @@ function DashboardContent() {
   }
 
   const canManageMembers = user?.role === 'OWNER' || user?.role === 'ADMIN';
-
-  const statCards = [
-    {
-      label: 'Servers Online',
-      value: summary ? summary.servers.online : null,
-      suffix: summary ? `of ${summary.servers.total}` : undefined,
-      icon: Server,
-      accent: 'bg-emerald-500',
-      iconTone: 'text-emerald-600 bg-emerald-500/10 dark:text-emerald-400',
-    },
-    {
-      label: 'Servers Offline',
-      value: summary ? summary.servers.offline : null,
-      icon: WifiOff,
-      accent: summary && summary.servers.offline > 0 ? 'bg-red-500' : 'bg-border',
-      iconTone:
-        summary && summary.servers.offline > 0
-          ? 'text-red-600 bg-red-500/10 dark:text-red-400'
-          : 'text-muted-foreground bg-muted',
-    },
-    {
-      label: 'Open Incidents',
-      value: summary ? summary.openIncidents : null,
-      icon: AlertTriangle,
-      accent: summary && summary.openIncidents > 0 ? 'bg-red-500' : 'bg-border',
-      iconTone:
-        summary && summary.openIncidents > 0
-          ? 'text-red-600 bg-red-500/10 dark:text-red-400'
-          : 'text-muted-foreground bg-muted',
-    },
-    {
-      label: 'Active Rules',
-      value: summary ? summary.activeRules : null,
-      icon: ListChecks,
-      accent: 'bg-[oklch(0.62_0.19_265)]',
-      iconTone: 'text-[oklch(0.55_0.19_265)] bg-[oklch(0.62_0.19_265)]/10 dark:text-[oklch(0.72_0.15_265)]',
-    },
-  ];
+  const servers = summary?.servers;
+  const value = (n: number | undefined) => (summaryLoading || n === undefined ? <Skeleton className="h-7 w-12" /> : n);
 
   return (
-    <div>
-      {error && (
-        <div className="mb-5 rounded-lg border border-red-500/20 bg-red-500/10 px-3.5 py-2.5 text-[13px] text-red-600 dark:text-red-400">
-          {error}
-        </div>
-      )}
+    <div className="space-y-6">
+      {error && <Notice tone="error">{error}</Notice>}
 
       {inviteLink && (
-        <div className="mb-5 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-medium text-foreground">Invitation created — share this link</p>
-              <code className="mt-2 block truncate rounded-md border border-border bg-card px-2.5 py-1.5 text-[12px] text-muted-foreground">
-                {inviteLink}
-              </code>
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              <button
-                onClick={copyInviteLink}
-                className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[12px] font-medium text-foreground hover:bg-muted"
-              >
-                <Copy className="size-3" strokeWidth={2} />
-                {copied ? 'Copied' : 'Copy'}
-              </button>
-              <button
-                onClick={() => setInviteLink(null)}
-                className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
-                aria-label="Dismiss"
-              >
-                <X className="size-3.5" strokeWidth={2} />
-              </button>
+        <Notice tone="success" icon={UserPlus}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="font-medium">Invitation created. Share this link with your colleague:</p>
+            <div className="flex items-center gap-1.5">
+              <Button size="xs" variant="outline" onClick={copyInviteLink}>
+                {copied ? <Check /> : <Copy />}
+                {copied ? 'Copied' : 'Copy link'}
+              </Button>
+              <Button size="icon-xs" variant="ghost" onClick={() => setInviteLink(null)} aria-label="Dismiss">
+                <X />
+              </Button>
             </div>
           </div>
-        </div>
+          <code className="mt-2 block truncate rounded-md border border-border bg-surface-2 px-2.5 py-1.5 font-mono text-[12px] text-muted-foreground">
+            {inviteLink}
+          </code>
+        </Notice>
       )}
 
-            {/* Stat cards */}
-      <div className="mb-6 grid grid-cols-4 gap-4">
-        {statCards.map((card) => (
-          <div
-            key={card.label}
-            className="flex items-center gap-4 rounded-xl border border-border bg-card p-5 shadow-sm"
-          >
-            <div className={`flex size-11 shrink-0 items-center justify-center rounded-xl ${card.iconTone}`}>
-              <card.icon className="size-5" strokeWidth={2.1} />
-            </div>
-            <div>
-                            <p className="text-[32px] font-bold leading-none tracking-tight text-foreground">
-                {summaryLoading || card.value === null ? (
-                  <span className="inline-block h-7 w-10 animate-pulse rounded bg-muted align-middle" />
-                ) : (
-                  card.value
-                )}
-              </p>
-                            <p className="mt-1.5 text-[13.5px] font-semibold text-muted-foreground">
-                {card.label}
-                {card.suffix && <span className="text-muted-foreground/70"> · {card.suffix}</span>}
-              </p>
-            </div>
-          </div>
-        ))}
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <StatTile
+          label="Servers online"
+          value={value(servers?.online)}
+          hint={servers ? `of ${servers.total} monitored` : undefined}
+          tone="online"
+          icon={Server}
+        />
+        <StatTile
+          label="Servers offline"
+          value={value(servers?.offline)}
+          hint={servers ? (servers.offline > 0 ? 'not reporting' : 'all reporting') : undefined}
+          tone={servers && servers.offline > 0 ? 'offline' : 'default'}
+          icon={WifiOff}
+        />
+        <StatTile
+          label="Open incidents"
+          value={value(summary?.openIncidents)}
+          hint={summary ? (summary.openIncidents > 0 ? 'need attention' : 'all clear') : undefined}
+          tone={summary && summary.openIncidents > 0 ? 'critical' : 'default'}
+          icon={AlertTriangle}
+        />
+        <StatTile
+          label="Active rules"
+          value={value(summary?.activeRules)}
+          hint="checked every 30 s"
+          tone="primary"
+          icon={ListChecks}
+        />
       </div>
 
-      <div className="mb-6 grid grid-cols-3 gap-4">
-        {/* Recent alerts */}
-        <div className="col-span-2 rounded-xl border border-border bg-card shadow-sm">
-          <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
-                        <h2 className="text-[15px] font-bold text-foreground">Recent Alerts</h2>
-            <Link
-              href="/incidents"
-              className="flex items-center gap-1 text-[12.5px] font-medium text-muted-foreground hover:text-foreground"
-            >
-              View all
-              <ArrowRight className="size-3" strokeWidth={2} />
+      <div className="grid gap-6 xl:grid-cols-3">
+        <Panel
+          className="xl:col-span-2"
+          label="Detections"
+          title="Recent alerts"
+          bodyClassName="p-0"
+          actions={
+            <Link href="/incidents" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+              View incidents
+              <ArrowRight />
             </Link>
-          </div>
-
+          }
+        >
           {summaryLoading ? (
             <div className="space-y-3 p-5">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-10 animate-pulse rounded-lg bg-muted" />
+              {[1, 2, 3, 4].map((i) => (
+                <Skeleton key={i} className="block h-11 w-full" />
               ))}
             </div>
           ) : summary && summary.recentAlerts.length > 0 ? (
             <ul className="divide-y divide-border">
               {summary.recentAlerts.map((a) => (
-                <li key={a.id} className="flex items-center justify-between px-5 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-[13px] font-medium text-foreground">{a.rule.name}</p>
-                    {a.server && <p className="text-[12px] text-muted-foreground">{a.server.name}</p>}
+                <li key={a.id} className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-accent/40">
+                  <SeverityBadge severity={a.rule.severity} className="w-[7.5rem] shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[14px] font-semibold text-foreground">{a.rule.name}</p>
+                    <p className="truncate font-mono text-[12px] text-muted-foreground">
+                      {a.server ? a.server.name : 'no server · account or IP based'}
+                    </p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2.5">
-                    <Badge className={SEVERITY_STYLES[a.rule.severity] ?? SEVERITY_STYLES.LOW}>
-                      {a.rule.severity}
-                    </Badge>
-                    <span className="w-14 text-right text-[11.5px] text-muted-foreground">
-                      {timeAgo(a.createdAt)}
-                    </span>
-                  </div>
+                  <span className="shrink-0 font-mono text-[12px] tabular-nums text-muted-foreground">{timeAgo(a.createdAt)}</span>
                 </li>
               ))}
             </ul>
           ) : (
-            <div className="flex flex-col items-center justify-center gap-2 px-5 py-10 text-center">
-              <div className="flex size-9 items-center justify-center rounded-full bg-muted">
-                <Inbox className="size-4 text-muted-foreground" strokeWidth={1.75} />
-              </div>
-              <p className="text-[13px] font-medium text-foreground">No alerts yet</p>
-              <p className="text-[12.5px] text-muted-foreground">
-                Alerts will appear here once your SIEM rules start firing.
-              </p>
-            </div>
+            <EmptyState
+              art="incidents"
+              title="No alerts yet"
+              description="Alerts appear here as soon as one of your rules fires."
+            />
           )}
-        </div>
+        </Panel>
 
-        {/* Fleet snapshot */}
-        <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-                      <h2 className="text-[15px] font-bold text-foreground">Fleet Health</h2>
+        <Panel label="Fleet" title="Server health" brackets>
           {summaryLoading ? (
-            <div className="h-2.5 w-full animate-pulse rounded-full bg-muted" />
-          ) : summary && summary.servers.total > 0 ? (
-            <div className="space-y-3">
-              <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-emerald-500 transition-all"
-                  style={{
-                    width: `${Math.round((summary.servers.online / summary.servers.total) * 100)}%`,
-                  }}
-                />
-              </div>
-              <div className="flex items-center justify-between text-[12.5px]">
-                <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <span className="size-1.5 rounded-full bg-emerald-500" />
-                  {summary.servers.online} online
-                </span>
-                <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <span className="size-1.5 rounded-full bg-red-400" />
-                  {summary.servers.offline} offline
-                </span>
-              </div>
-              <Link
-                href="/servers"
-                className="mt-2 flex items-center justify-center gap-1 rounded-lg border border-border py-2 text-[12.5px] font-medium text-foreground hover:bg-muted"
-              >
+            <Skeleton className="block h-24 w-full" />
+          ) : servers && servers.total > 0 ? (
+            <div>
+              <FleetLights online={servers.online} notReporting={servers.offline} />
+              <dl className="mt-6 grid grid-cols-2 gap-3 border-t border-border pt-5">
+                {[
+                  { label: 'Online', count: servers.online, color: TONE_COLOR.online },
+                  { label: 'Not reporting', count: servers.offline, color: TONE_COLOR.offline },
+                ].map((s) => (
+                  <div key={s.label}>
+                    <dt className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.1em] text-muted-foreground">
+                      <span className="size-1.5 rounded-full" style={{ background: s.color }} aria-hidden />
+                      {s.label}
+                    </dt>
+                    <dd className="mt-1.5 font-display text-[22px] font-semibold tabular-nums text-foreground">{s.count}</dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="mt-5 text-[13px] leading-relaxed text-muted-foreground">
+                A server counts as offline when its agent has not reported for a minute.
+              </p>
+              <Link href="/servers" className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'mt-4 w-full')}>
                 Manage servers
-                <ArrowRight className="size-3" strokeWidth={2} />
+                <ArrowRight />
               </Link>
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-2 py-6 text-center">
-              <div className="flex size-9 items-center justify-center rounded-full bg-muted">
-                <Server className="size-4 text-muted-foreground" strokeWidth={1.75} />
-              </div>
-              <p className="text-[12.5px] text-muted-foreground">No servers registered</p>
-              <Link
-                href="/servers"
-                className="text-[12.5px] font-medium text-[oklch(0.62_0.19_265)] hover:underline"
-              >
-                Register a server →
-              </Link>
-            </div>
+            <EmptyState
+              art="server"
+              title="No servers yet"
+              description="Register a server and start its agent to see it here."
+              className="py-6"
+              action={
+                <Link href="/servers" className={buttonVariants({ size: 'sm' })}>
+                  Register a server
+                </Link>
+              }
+            />
           )}
-        </div>
+        </Panel>
       </div>
 
-      {/* Organization members */}
-      <div className="rounded-xl border border-border bg-card shadow-sm">
-        <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
-                      <h2 className="text-[15px] font-bold text-foreground">Organization Members</h2>
-          {canManageMembers && (
-            <button
-              onClick={() => setShowInviteForm(!showInviteForm)}
-              className="flex h-7.5 items-center gap-1.5 rounded-md bg-[oklch(0.62_0.19_265)] px-2.5 text-[12.5px] font-medium text-white hover:bg-[oklch(0.66_0.19_265)]"
-            >
-              <UserPlus className="size-3.5" strokeWidth={2} />
-              Invite Member
-            </button>
-          )}
-        </div>
-
+      <Panel
+        label="Team"
+        title="Organization members"
+        bodyClassName="p-0"
+        actions={
+          canManageMembers && (
+            <Button size="sm" variant={showInviteForm ? 'outline' : 'default'} onClick={() => setShowInviteForm(!showInviteForm)}>
+              {showInviteForm ? <X /> : <UserPlus />}
+              {showInviteForm ? 'Close' : 'Invite member'}
+            </Button>
+          )
+        }
+      >
         {showInviteForm && (
-          <form onSubmit={handleInvite} className="flex items-end gap-2 border-b border-border bg-muted/50 px-5 py-3.5">
-            <div className="flex-1">
-              <label className="mb-1 block text-[11.5px] font-medium text-muted-foreground">Email</label>
+          <form onSubmit={handleInvite} className="flex flex-wrap items-end gap-3 border-b border-border bg-surface-2/50 px-5 py-4">
+            <div className="min-w-56 flex-1">
+              <label htmlFor="invite-email" className={fieldLabelClass}>
+                Email
+              </label>
               <input
+                id="invite-email"
                 type="email"
                 required
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
                 placeholder="colleague@company.com"
-                className="h-8 w-full rounded-md border border-border bg-background px-2.5 text-[13px] text-foreground outline-none focus:border-[oklch(0.62_0.19_265)] focus:ring-2 focus:ring-[oklch(0.62_0.19_265)]/20"
+                className={fieldControlClass}
               />
             </div>
-            <div>
-              <label className="mb-1 block text-[11.5px] font-medium text-muted-foreground">Role</label>
-              <select
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value)}
-                className="h-8 rounded-md border border-border bg-background px-2 text-[13px] text-foreground outline-none focus:border-[oklch(0.62_0.19_265)]"
-              >
+            <div className="w-56">
+              <label htmlFor="invite-role" className={fieldLabelClass}>
+                Role
+              </label>
+              <select id="invite-role" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)} className={fieldSelectClass}>
                 {ROLES.filter((r) => r !== 'OWNER').map((r) => (
-                  <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>
+                  <option key={r} value={r}>
+                    {roleLabel(r)}
+                  </option>
                 ))}
               </select>
             </div>
-            <button
-              type="submit"
-              disabled={inviting}
-              className="h-8 rounded-md bg-[oklch(0.62_0.19_265)] px-3 text-[12.5px] font-medium text-white hover:bg-[oklch(0.66_0.19_265)] disabled:opacity-50"
-            >
-              {inviting ? 'Sending...' : 'Send Invite'}
-            </button>
+            <Button type="submit" disabled={inviting} className="h-10">
+              {inviting ? 'Creating link...' : 'Create invitation'}
+            </Button>
           </form>
         )}
 
-        <table className="w-full text-[13px]">
+        <table className="w-full text-[14px]">
           <thead>
-            <tr className="border-b border-border text-left text-[11.5px] font-medium uppercase tracking-wide text-muted-foreground">
-              <th className="px-5 py-2.5">Email</th>
-              <th className="px-5 py-2.5">Role</th>
-              <th className="px-5 py-2.5">Joined</th>
+            <tr className="border-b border-border text-left">
+              <th className="hud-label px-5 py-3 font-medium">Member</th>
+              <th className="hud-label px-5 py-3 font-medium">Role</th>
+              <th className="hud-label px-5 py-3 text-right font-medium">Joined</th>
             </tr>
           </thead>
           <tbody>
             {members.map((m) => (
-              <tr key={m.id} className="border-b border-border/60 last:border-0 hover:bg-muted/50">
-                <td className="px-5 py-2.5 text-foreground">{m.email}</td>
-                <td className="px-5 py-2.5">
+              <tr key={m.id} className="border-b border-border/70 transition-colors last:border-0 hover:bg-accent/40">
+                <td className="px-5 py-3">
+                  <div className="flex items-center gap-3">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/12 font-mono text-[11px] font-semibold text-primary-bright">
+                      {m.email.slice(0, 2).toUpperCase()}
+                    </span>
+                    <span className="truncate font-medium text-foreground">
+                      {m.email}
+                      {m.id === user?.userId && <span className="ml-2 font-mono text-[11px] text-muted-foreground">(you)</span>}
+                    </span>
+                  </div>
+                </td>
+                <td className="px-5 py-3">
                   {canManageMembers && m.role !== 'OWNER' ? (
                     <select
                       value={m.role}
                       onChange={(e) => handleRoleChange(m.id, e.target.value)}
-                      className="rounded-md border border-border bg-background px-2 py-1 text-[12px] text-foreground outline-none focus:border-[oklch(0.62_0.19_265)]"
+                      aria-label={`Role of ${m.email}`}
+                      className={cn(fieldSelectClass, 'h-8 w-48 text-[13px]')}
                     >
                       {ROLES.filter((r) => r !== 'OWNER').map((r) => (
-                        <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>
+                        <option key={r} value={r}>
+                          {roleLabel(r)}
+                        </option>
                       ))}
                     </select>
                   ) : (
-                    <Badge className="border-border bg-muted text-muted-foreground">
-                      {m.role.replace(/_/g, ' ')}
-                    </Badge>
+                    <span
+                      className={cn(
+                        'inline-flex h-6 items-center rounded-md border px-2 font-mono text-[11px] font-semibold uppercase tracking-[0.08em]',
+                        m.role === 'OWNER'
+                          ? 'border-primary/30 bg-primary/10 text-primary-bright'
+                          : 'border-border-strong bg-surface-2 text-muted-foreground',
+                      )}
+                    >
+                      {roleLabel(m.role)}
+                    </span>
                   )}
                 </td>
-                <td className="px-5 py-2.5 text-muted-foreground">
-                  {new Date(m.createdAt).toLocaleDateString()}
+                <td className="px-5 py-3 text-right font-mono text-[12.5px] tabular-nums text-muted-foreground">
+                  {formatDate(m.createdAt)}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
+      </Panel>
     </div>
   );
 }
@@ -422,7 +417,7 @@ function DashboardContent() {
 export default function DashboardPage() {
   return (
     <ProtectedRoute>
-      <AppShell title="Dashboard">
+      <AppShell title="Dashboard" description="Fleet health, open incidents and the latest detections for your organization.">
         <DashboardContent />
       </AppShell>
     </ProtectedRoute>
