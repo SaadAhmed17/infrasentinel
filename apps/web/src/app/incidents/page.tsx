@@ -1,13 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { CheckCircle2, ChevronDown, Search, Server as ServerIcon } from 'lucide-react';
 import { ProtectedRoute } from '@/components/protected-route';
 import { AppShell } from '@/components/app-shell';
 import { apiClient } from '@/lib/api-client';
 import { canManageSecurity } from '@/lib/permissions';
 import { useAuth } from '@/contexts/auth-context';
-import { Badge } from '@/components/ui/badge';
-import { ChevronDown, ShieldAlert, Search, CheckCircle2, ClipboardList, Server as ServerIcon } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Notice } from '@/components/ui/notice';
+import { Panel } from '@/components/ui/panel';
+import { IncidentStatusBadge, SeverityBadge } from '@/components/ui/status';
+import { TONE_COLOR, type Tone } from '@/components/ui/tone';
+import { cn } from '@/lib/utils';
 
 interface Alert {
   id: string;
@@ -27,18 +33,13 @@ interface Incident {
   createdAt: string;
 }
 
-const SEVERITY_STYLES: Record<string, string> = {
-  CRITICAL: 'border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-400',
-  HIGH: 'border-orange-500/20 bg-orange-500/10 text-orange-600 dark:text-orange-400',
-  MEDIUM: 'border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400',
-  LOW: 'border-border bg-muted text-muted-foreground',
-};
-
-const STATUS_STYLES: Record<string, string> = {
-  RESOLVED: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-  INVESTIGATING: 'border-blue-500/20 bg-blue-500/10 text-blue-600 dark:text-blue-400',
-  OPEN: 'border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-400',
-};
+const SEVERITY_TONE: Record<string, Tone> = { LOW: 'low', MEDIUM: 'medium', HIGH: 'high', CRITICAL: 'critical' };
+const FILTERS = [
+  { value: 'ALL', label: 'All' },
+  { value: 'OPEN', label: 'Open' },
+  { value: 'INVESTIGATING', label: 'Investigating' },
+  { value: 'RESOLVED', label: 'Resolved' },
+];
 
 function formatKey(key: string) {
   return key
@@ -48,69 +49,91 @@ function formatKey(key: string) {
     .trim();
 }
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+
+function formatDateTime(value: string | Date, withSeconds = false) {
+  return new Date(value).toLocaleString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: withSeconds ? '2-digit' : undefined,
+    hour12: false,
+  });
+}
+
 function formatValue(value: unknown): string {
   if (value === null || value === undefined) return '—';
-  if (typeof value === 'number') return Number.isInteger(value) ? String(value) : value.toFixed(2);
+  // up to 4 decimals, without trailing zeros (93.6, 0.0123)
+  if (typeof value === 'number') return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(4)));
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (typeof value === 'string' && ISO_DATE.test(value)) return formatDateTime(value, true);
+  if (Array.isArray(value)) return value.map((v) => (typeof v === 'object' ? JSON.stringify(v) : String(v))).join(', ');
   if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
 }
 
-function DetailsTable({ details }: { details: Record<string, unknown> }) {
+function timeAgo(dateStr: string) {
+  const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function DetailsGrid({ details }: { details: Record<string, unknown> }) {
   const entries = Object.entries(details);
   if (entries.length === 0) {
-    return <p className="text-[12.5px] text-muted-foreground">No additional details.</p>;
+    return <p className="text-[13px] text-muted-foreground">No additional details.</p>;
   }
   return (
-    <table className="w-full overflow-hidden rounded-md border border-border text-[12.5px]">
-      <tbody>
-        {entries.map(([key, value], i) => (
-          <tr key={key} className={i !== entries.length - 1 ? 'border-b border-border' : ''}>
-            <td className="w-2/5 bg-muted/60 px-3 py-1.5 font-semibold text-muted-foreground">
-              {formatKey(key)}
-            </td>
-            <td className="px-3 py-1.5 font-mono text-foreground">{formatValue(value)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <dl className="grid overflow-hidden rounded-lg border border-border sm:grid-cols-[minmax(9rem,auto)_1fr]">
+      {entries.map(([key, value], i) => (
+        <div key={key} className={cn('contents', i > 0 && '[&>*]:border-t [&>*]:border-border')}>
+          <dt className="bg-surface-2/70 px-3 py-2 font-mono text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+            {formatKey(key)}
+          </dt>
+          <dd className="break-all px-3 py-2 font-mono text-[12.5px] text-foreground">{formatValue(value)}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
-function AlertRow({ alert }: { alert: Alert }) {
+function AlertItem({ alert, last }: { alert: Alert; last: boolean }) {
   const [showDetails, setShowDetails] = useState(false);
-  const created = new Date(alert.createdAt);
 
   return (
-    <li className="rounded-lg border border-border bg-card p-3">
-      <div className="flex items-start justify-between gap-3">
+    <li className="relative pl-7">
+      {/* timeline */}
+      {!last && <span className="absolute left-[7px] top-5 h-full w-px bg-border-strong" aria-hidden />}
+      <span
+        className={cn(
+          'absolute left-0 top-1.5 size-[15px] rounded-[4px] border-2',
+          alert.status === 'RESOLVED' ? 'border-status-online/60 bg-status-online/20' : 'border-sev-critical/60 bg-sev-critical/20',
+        )}
+        aria-hidden
+      />
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[13.5px] font-bold text-foreground">{alert.rule.name}</p>
-          <p className="mt-1 text-[12px] text-muted-foreground">
-            <span className="font-semibold text-foreground/70">Server:</span>{' '}
-            {alert.server ? alert.server.name : 'None'}
-            <span className="mx-1.5">·</span>
-            <span className="font-semibold text-foreground/70">Date:</span> {created.toLocaleDateString()}
-            <span className="mx-1.5">·</span>
-            <span className="font-semibold text-foreground/70">Time:</span> {created.toLocaleTimeString()}
+          <p className="text-[14px] font-semibold text-foreground">{alert.rule.name}</p>
+          <p className="mt-0.5 font-mono text-[12px] text-muted-foreground">
+            {alert.server ? alert.server.name : 'no server'}
+            <span className="mx-2 text-border-strong">/</span>
+            {formatDateTime(alert.createdAt, true)}
+            <span className="mx-2 text-border-strong">/</span>
+            {alert.status.toLowerCase()}
           </p>
         </div>
-        <button
-          onClick={() => setShowDetails((v) => !v)}
-          className={`flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-[12px] font-semibold transition-colors ${
-            showDetails
-              ? 'border-[oklch(0.62_0.19_265)]/30 bg-[oklch(0.62_0.19_265)]/10 text-[oklch(0.55_0.19_265)] dark:text-[oklch(0.72_0.15_265)]'
-              : 'border-border text-foreground hover:bg-muted'
-          }`}
-        >
-          <ClipboardList className="size-3.5" strokeWidth={2} />
-          {showDetails ? 'Hide Details' : 'Details'}
-        </button>
+        <Button size="xs" variant={showDetails ? 'secondary' : 'outline'} onClick={() => setShowDetails((v) => !v)} aria-expanded={showDetails}>
+          {showDetails ? 'Hide details' : 'Details'}
+        </Button>
       </div>
-
       {showDetails && (
         <div className="mt-3">
-          <DetailsTable details={alert.details} />
+          <DetailsGrid details={alert.details} />
         </div>
       )}
     </li>
@@ -121,11 +144,17 @@ function IncidentsContent() {
   const { user } = useAuth();
   const canChangeStatus = canManageSecurity(user?.role);
   const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [filter, setFilter] = useState('ALL');
   const [error, setError] = useState('');
 
   function loadIncidents() {
-    apiClient.get<Incident[]>('/incidents').then(setIncidents).catch((err) => setError(err.message));
+    apiClient
+      .get<Incident[]>('/incidents')
+      .then(setIncidents)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoaded(true));
   }
 
   useEffect(() => {
@@ -144,120 +173,159 @@ function IncidentsContent() {
     }
   }
 
+  const counts: Record<string, number> = {
+    ALL: incidents.length,
+    OPEN: incidents.filter((i) => i.status === 'OPEN').length,
+    INVESTIGATING: incidents.filter((i) => i.status === 'INVESTIGATING').length,
+    RESOLVED: incidents.filter((i) => i.status === 'RESOLVED').length,
+  };
+  const shown = filter === 'ALL' ? incidents : incidents.filter((i) => i.status === filter);
   const openCount = incidents.filter((i) => i.status !== 'RESOLVED').length;
 
   return (
-    <div>
-      <p className="mb-5 text-[14.5px] font-semibold text-muted-foreground">
-        {incidents.length === 0 ? 'No incidents recorded' : `${openCount} of ${incidents.length} incidents open`}
-      </p>
+    <div className="space-y-6">
+      {error && <Notice tone="error">{error}</Notice>}
 
-      {error && (
-        <div className="mb-5 rounded-lg border border-red-500/20 bg-red-500/10 px-3.5 py-2.5 text-[14px] font-medium text-red-600 dark:text-red-400">
-          {error}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="inline-flex rounded-lg border border-border bg-surface-2/60 p-1" role="tablist" aria-label="Filter by status">
+          {FILTERS.map((f) => (
+            <button
+              key={f.value}
+              role="tab"
+              aria-selected={filter === f.value}
+              onClick={() => setFilter(f.value)}
+              className={cn(
+                'inline-flex h-8 items-center gap-2 rounded-md px-3 text-[13px] font-medium transition-colors',
+                filter === f.value ? 'bg-card text-foreground shadow-sm ring-1 ring-border' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {f.label}
+              <span className="font-mono text-[11px] tabular-nums text-muted-foreground">{counts[f.value]}</span>
+            </button>
+          ))}
         </div>
+        <p className="font-mono text-[12.5px] text-muted-foreground">
+          {loaded ? `${openCount} of ${incidents.length} still open` : 'Loading incidents...'}
+        </p>
+      </div>
+
+      {!canChangeStatus && (
+        <Notice tone="info">You can view incidents. Only owners, admins and security analysts can change their status.</Notice>
       )}
 
-      {incidents.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-border bg-card px-5 py-14 text-center shadow-sm">
-          <div className="flex size-11 items-center justify-center rounded-full bg-muted">
-            <ShieldAlert className="size-5 text-muted-foreground" strokeWidth={1.75} />
-          </div>
-          <p className="text-[15px] font-bold text-foreground">No incidents yet</p>
-          <p className="text-[14px] text-muted-foreground">
-            Incidents are created automatically when a SIEM rule fires.
-          </p>
-        </div>
-      ) : (
+      {!loaded ? (
         <div className="space-y-3">
-          {incidents.map((inc) => {
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-20 animate-pulse rounded-xl bg-muted" />
+          ))}
+        </div>
+      ) : shown.length === 0 ? (
+        <Panel bodyClassName="p-0">
+          <EmptyState
+            art="incidents"
+            title={incidents.length === 0 ? 'No incidents yet' : 'Nothing here'}
+            description={
+              incidents.length === 0
+                ? 'Incidents are created automatically when a rule fires.'
+                : 'No incidents have this status right now.'
+            }
+          />
+        </Panel>
+      ) : (
+        <ul className="space-y-3">
+          {shown.map((inc) => {
             const expanded = expandedId === inc.id;
-            const created = new Date(inc.createdAt);
+            const tone = SEVERITY_TONE[inc.severity] ?? 'unknown';
             const serverNames = Array.from(
-              new Set(inc.alerts.map((a) => a.server?.name).filter((n): n is string => Boolean(n)))
+              new Set(inc.alerts.map((a) => a.server?.name).filter((n): n is string => Boolean(n))),
             );
             return (
-              <div key={inc.id} className="rounded-xl border border-border bg-card shadow-sm">
+              <li
+                key={inc.id}
+                className={cn(
+                  'relative overflow-hidden rounded-xl border bg-card/90 shadow-[var(--shadow-panel)] transition-colors',
+                  expanded ? 'border-border-strong' : 'border-border',
+                  inc.status === 'RESOLVED' && 'opacity-80',
+                )}
+              >
+                <span aria-hidden className="absolute inset-y-0 left-0 w-[3px]" style={{ background: TONE_COLOR[tone] }} />
                 <button
                   onClick={() => setExpandedId(expanded ? null : inc.id)}
-                  className="flex w-full items-center justify-between gap-3 p-4 text-left"
+                  aria-expanded={expanded}
+                  className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-accent/30"
                 >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <ChevronDown
-                      className={`size-4 shrink-0 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`}
-                      strokeWidth={2.25}
-                    />
-                    <div className="min-w-0">
-                      <p className="truncate text-[14.5px] font-bold text-foreground">{inc.title}</p>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12.5px] text-muted-foreground">
-                        <span>
-                          <span className="font-semibold text-foreground/70">Date:</span> {created.toLocaleDateString()}
-                        </span>
-                        <span>
-                          <span className="font-semibold text-foreground/70">Time:</span> {created.toLocaleTimeString()}
-                        </span>
-                        {serverNames.length > 0 && (
-                          <span className="flex items-center gap-1">
-                            <ServerIcon className="size-3" strokeWidth={2} />
-                            <span className="font-semibold text-foreground/70">Server:</span> {serverNames.join(', ')}
+                  <div className="min-w-0">
+                    <p className="truncate text-[15px] font-semibold text-foreground">{inc.title}</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[12px] text-muted-foreground">
+                      <span title={formatDateTime(inc.createdAt)}>{timeAgo(inc.createdAt)}</span>
+                      <span className="text-border-strong">/</span>
+                      <span>
+                        {inc.alerts.length} alert{inc.alerts.length === 1 ? '' : 's'}
+                      </span>
+                      {serverNames.length > 0 && (
+                        <>
+                          <span className="text-border-strong">/</span>
+                          <span className="inline-flex items-center gap-1.5">
+                            <ServerIcon className="size-3" strokeWidth={2} aria-hidden />
+                            {serverNames.join(', ')}
                           </span>
-                        )}
-                      </div>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <Badge className={SEVERITY_STYLES[inc.severity] ?? SEVERITY_STYLES.LOW}>{inc.severity}</Badge>
-                    <Badge className={STATUS_STYLES[inc.status] ?? STATUS_STYLES.OPEN}>{inc.status}</Badge>
+                    <SeverityBadge severity={inc.severity} className="hidden sm:inline-flex" />
+                    <IncidentStatusBadge status={inc.status} />
+                    <ChevronDown
+                      className={cn('size-4 text-muted-foreground transition-transform', expanded && 'rotate-180')}
+                      strokeWidth={2}
+                      aria-hidden
+                    />
                   </div>
                 </button>
 
                 {expanded && (
-                  <div className="border-t border-border p-4">
-                    {canChangeStatus ? (
-                      <div className="mb-4 flex gap-2">
-                        <button
-                          onClick={() => updateStatus(inc.id, 'INVESTIGATING')}
-                          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-semibold transition-colors ${
-                            inc.status === 'INVESTIGATING'
-                              ? 'border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                              : 'border-border text-foreground hover:bg-muted'
-                          }`}
-                        >
-                          <Search className="size-3.5" strokeWidth={2} />
-                          Investigating
-                        </button>
-                        <button
-                          onClick={() => updateStatus(inc.id, 'RESOLVED')}
-                          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-semibold transition-colors ${
-                            inc.status === 'RESOLVED'
-                              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                              : 'border-border text-foreground hover:bg-muted'
-                          }`}
-                        >
-                          <CheckCircle2 className="size-3.5" strokeWidth={2} />
-                          Resolved
-                        </button>
-                      </div>
-                    ) : (
-                      <p className="mb-4 text-[13px] text-muted-foreground">
-                        Only owners, admins and security analysts can change an incident&apos;s status.
-                      </p>
-                    )}
+                  <div className="border-t border-border px-5 py-5">
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                      <p className="font-mono text-[12px] text-muted-foreground">Opened {formatDateTime(inc.createdAt)}</p>
+                      {canChangeStatus && (
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            aria-pressed={inc.status === 'INVESTIGATING'}
+                            onClick={() => updateStatus(inc.id, 'INVESTIGATING')}
+                            className={cn(inc.status === 'INVESTIGATING' && 'border-sev-medium/40 bg-sev-medium/10 text-sev-medium')}
+                          >
+                            <Search />
+                            Investigating
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            aria-pressed={inc.status === 'RESOLVED'}
+                            onClick={() => updateStatus(inc.id, 'RESOLVED')}
+                            className={cn(inc.status === 'RESOLVED' && 'border-status-online/40 bg-status-online/10 text-status-online')}
+                          >
+                            <CheckCircle2 />
+                            Resolved
+                          </Button>
+                        </div>
+                      )}
+                    </div>
 
-                    <p className="mb-2 text-[12px] font-bold uppercase tracking-wide text-muted-foreground">
-                      Alerts in this incident ({inc.alerts.length})
-                    </p>
-                    <ul className="space-y-2">
-                      {inc.alerts.map((a) => (
-                        <AlertRow key={a.id} alert={a} />
+                    <p className="hud-label mb-4">Alerts in this incident ({inc.alerts.length})</p>
+                    <ul className="space-y-5">
+                      {inc.alerts.map((a, i) => (
+                        <AlertItem key={a.id} alert={a} last={i === inc.alerts.length - 1} />
                       ))}
                     </ul>
                   </div>
                 )}
-              </div>
+              </li>
             );
           })}
-        </div>
+        </ul>
       )}
     </div>
   );
@@ -266,9 +334,12 @@ function IncidentsContent() {
 export default function IncidentsPage() {
   return (
     <ProtectedRoute>
-      <AppShell title="Incidents">
+      <AppShell
+        title="Incidents"
+        description="Alerts grouped into incidents. Resolve an incident once its cause is handled; if the problem continues, a new alert is raised."
+      >
         <IncidentsContent />
       </AppShell>
     </ProtectedRoute>
   );
-} 
+}
