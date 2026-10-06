@@ -1,53 +1,93 @@
+'use client';
+
 import type { ReactNode } from 'react';
-import { ShieldCheck } from 'lucide-react';
+import Link from 'next/link';
+import { AppBackground } from '@/components/app-background';
+import { RackSkyline } from '@/components/auth/rack-skyline';
+import { Logo } from '@/components/brand/logo';
+import { ThemeToggle } from '@/components/theme-toggle';
+import { buttonVariants } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
-// Shared look of the password-reset screens, matching the login and signup pages.
-export const authInputClassName =
-  'h-9.5 border-white/10 bg-[oklch(0.16_0.01_265)] pl-8.5 text-white placeholder:text-slate-500 focus-visible:border-[oklch(0.62_0.19_265)] focus-visible:ring-[oklch(0.62_0.19_265)]/30';
+// Shared look of the sign-in, sign-up, password and invitation screens.
+export const authButtonClassName = cn(buttonVariants({ size: 'lg' }), 'w-full');
+export const authLinkClassName = 'font-semibold text-primary underline-offset-4 hover:underline';
 
-export const authButtonClassName =
-  'flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[oklch(0.62_0.19_265)] text-sm font-semibold text-white shadow-lg shadow-[oklch(0.62_0.19_265)]/30 transition-all hover:bg-[oklch(0.66_0.19_265)] active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50';
+const CAPABILITIES = ['Rules checked every 30 s', 'LSTM anomaly detection', 'AI incident assistant'];
 
 export function AuthShell({
   title,
   description,
   children,
+  footer,
 }: {
   title: string;
-  description: string;
+  description: ReactNode;
   children: ReactNode;
+  footer?: ReactNode;
 }) {
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[oklch(0.16_0.01_265)] px-4 py-12">
-      <div
-        className="pointer-events-none absolute -top-40 left-1/4 h-[30rem] w-[30rem] rounded-full opacity-20 blur-3xl"
-        style={{ background: 'radial-gradient(circle, oklch(0.62 0.19 265) 0%, transparent 70%)' }}
-      />
-      <div
-        className="pointer-events-none absolute -bottom-40 right-1/4 h-[26rem] w-[26rem] rounded-full opacity-15 blur-3xl"
-        style={{ background: 'radial-gradient(circle, oklch(0.68 0.16 195) 0%, transparent 70%)' }}
-      />
+    <div className="relative min-h-screen lg:grid lg:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)]">
+      <AppBackground intensity="bold" />
 
-      <div className="relative w-full max-w-sm">
-        <div className="mb-8 flex flex-col items-center text-center">
-          <div
-            className="mb-4 flex size-12 items-center justify-center rounded-2xl shadow-lg shadow-black/30 ring-1 ring-white/10"
-            style={{ background: 'oklch(0.62 0.19 265)' }}
-          >
-            <ShieldCheck className="size-6 text-white" strokeWidth={2.25} />
-          </div>
-          <h1 className="text-xl font-semibold tracking-tight text-white">InfraSentinel</h1>
-          <p className="mt-1 text-[13px] text-slate-400">AI-Augmented Infrastructure Monitoring</p>
+      <aside className="relative z-10 hidden min-h-screen flex-col overflow-hidden border-r border-border bg-surface-3/45 lg:flex dark:bg-transparent">
+        <div className="px-12 pt-10 xl:px-16">
+          <Link href="/" className="inline-flex rounded-md" aria-label="InfraSentinel home">
+            <Logo markClassName="w-7" wordmarkClassName="text-[20px]" />
+          </Link>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-[oklch(0.21_0.01_265)] p-7 shadow-2xl shadow-black/40">
-          <div className="mb-6 space-y-1">
-            <h2 className="text-lg font-semibold text-white">{title}</h2>
-            <p className="text-[13px] text-slate-400">{description}</p>
-          </div>
-          {children}
+        <div className="flex flex-1 flex-col justify-center px-12 py-12 xl:px-16">
+          <p className="hud-label">Infrastructure security monitoring</p>
+          <h2 className="mt-5 max-w-[14ch] font-display text-[40px] font-semibold leading-[1.06] tracking-[-0.035em] text-foreground xl:text-[46px]">
+            See every server. Catch every attack.
+          </h2>
+          <p className="mt-6 max-w-md text-[15.5px] leading-relaxed text-muted-foreground">
+            Live metrics, SIEM rules and an LSTM anomaly model watch your fleet around the clock. When
+            something happens, the AI assistant explains it.
+          </p>
+          <ul className="mt-8 flex flex-wrap gap-2">
+            {CAPABILITIES.map((item) => (
+              <li
+                key={item}
+                className="inline-flex items-center gap-2 rounded-full border border-border-strong bg-surface-2/60 px-3 py-1.5 font-mono text-[11.5px] text-foreground"
+              >
+                <span className="size-1.5 rounded-[1px] bg-primary-bright" aria-hidden />
+                {item}
+              </li>
+            ))}
+          </ul>
         </div>
-      </div>
+
+        <RackSkyline className="h-[34vh] min-h-52 w-full" />
+      </aside>
+
+      <main className="relative z-10 flex min-h-screen flex-col px-6 py-6 sm:px-10">
+        <div className="flex items-center justify-between">
+          <Link href="/" className="inline-flex rounded-md lg:invisible" aria-label="InfraSentinel home">
+            <Logo markClassName="w-6" wordmarkClassName="text-[18px]" />
+          </Link>
+          <ThemeToggle />
+        </div>
+
+        <div className="flex flex-1 items-center justify-center py-10">
+          <div className="w-full max-w-[400px] animate-fade-up">
+            <h1 className="font-display text-[26px] font-semibold leading-tight tracking-[-0.025em] text-foreground">
+              {title}
+            </h1>
+            <div className="mt-2.5 text-[14.5px] leading-relaxed text-muted-foreground">{description}</div>
+            <div className="mt-8">{children}</div>
+            {footer && (
+              <div className="mt-8 border-t border-border pt-6 text-center text-[14px] text-muted-foreground">
+                {footer}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* small screens: the skyline becomes a strip under the form */}
+        <RackSkyline className="-mx-6 -mb-6 h-44 w-[calc(100%+3rem)] sm:-mx-10 sm:w-[calc(100%+5rem)] lg:hidden" />
+      </main>
     </div>
   );
 }

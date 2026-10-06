@@ -1,8 +1,15 @@
 'use client';
 
 import { Suspense, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Check, Loader2, Lock } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
+import { AuthShell, authButtonClassName, authLinkClassName } from '@/components/auth-shell';
+import { IconInput, PasswordVisibilityToggle } from '@/components/ui/icon-input';
+import { Label } from '@/components/ui/label';
+import { Notice } from '@/components/ui/notice';
+import { cn } from '@/lib/utils';
 
 function AcceptInviteForm() {
   const searchParams = useSearchParams();
@@ -10,6 +17,7 @@ function AcceptInviteForm() {
   const token = searchParams.get('token');
 
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -38,81 +46,86 @@ function AcceptInviteForm() {
 
       router.push('/dashboard');
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Failed to accept invitation',
-      );
+      setError(err instanceof Error ? err.message : 'Failed to accept invitation');
     } finally {
       setLoading(false);
     }
   }
 
+  const signInInstead = (
+    <>
+      Already joined?{' '}
+      <Link href="/login" className={authLinkClassName}>
+        Sign in
+      </Link>
+    </>
+  );
+
   if (!token) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <p className="text-red-600">
-          This invitation link is missing a token. Please check the link you were sent.
-        </p>
-      </div>
+      <AuthShell title="Invalid invitation link" description="This link is missing its invitation code." footer={signInInstead}>
+        <Notice tone="error">This invitation link is missing a token. Please check the link you were sent.</Notice>
+      </AuthShell>
     );
   }
 
+  const passwordValid = password.length >= 8;
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <div className="w-full max-w-sm rounded-lg border bg-white p-8 shadow-sm">
-        <h1 className="mb-6 text-2xl font-semibold">
-          Join your team on InfraSentinel
-        </h1>
-
-        <p className="mb-4 text-sm text-gray-600">
-          Set a password to accept this invitation.
-        </p>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Password
-            </label>
-
-            <input
-              type="password"
-              required
-              minLength={8}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-            />
-          </div>
-
-          {error && (
-            <p className="text-sm text-red-600">
-              {error}
+    <AuthShell
+      title="Join your team"
+      description="Choose a password to accept your invitation to InfraSentinel."
+      footer={signInInstead}
+    >
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="space-y-2">
+          <Label htmlFor="password">Password</Label>
+          <IconInput
+            icon={Lock}
+            id="password"
+            type={showPassword ? 'text' : 'password'}
+            autoComplete="new-password"
+            placeholder="At least 8 characters"
+            required
+            minLength={8}
+            autoFocus
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            trailing={<PasswordVisibilityToggle visible={showPassword} onToggle={() => setShowPassword((v) => !v)} />}
+          />
+          {password.length > 0 && (
+            <p
+              className={cn(
+                'flex items-center gap-1.5 text-[12.5px] font-medium',
+                passwordValid ? 'text-status-online' : 'text-muted-foreground',
+              )}
+            >
+              {passwordValid && <Check className="size-3.5" strokeWidth={2.5} />}
+              At least 8 characters
             </p>
           )}
+        </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-md bg-blue-600 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {loading ? 'Joining...' : 'Accept & Join'}
-          </button>
-        </form>
-      </div>
-    </div>
+        {error && <Notice tone="error">{error}</Notice>}
+
+        <button type="submit" disabled={loading} className={authButtonClassName}>
+          {loading ? (
+            <>
+              <Loader2 className="size-4 animate-spin" />
+              Joining...
+            </>
+          ) : (
+            'Accept invitation'
+          )}
+        </button>
+      </form>
+    </AuthShell>
   );
 }
 
 export default function AcceptInvitePage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-screen items-center justify-center">
-          Loading...
-        </div>
-      }
-    >
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
       <AcceptInviteForm />
     </Suspense>
   );

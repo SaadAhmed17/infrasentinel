@@ -179,6 +179,22 @@
   --grid-line: rgb(11 23 36 / 0.045);
   --grid-line-major: rgb(47 79 224 / 0.08);
   --shadow-panel: 0 1px 0 rgb(11 23 36 / 0.04), 0 10px 30px -18px rgb(11 23 36 / 0.25);
+
+  /* pixel skyline on the sign-in pages: an ink print on blueprint paper */
+  --scene-star: rgb(47 79 224 / 0.35);
+  --scene-sun-1: #a6e6df;
+  --scene-sun-2: #4fbfb5;
+  --scene-sun-3: #1f8f93;
+  --scene-far: #c5d2dc;
+  --scene-rack: #0b1724;
+  --scene-rack-edge: #2b4366;
+  --scene-rack-line: #e8edf0;
+  --scene-led-ok: #2ed3c3;
+  --scene-led-warn: #f2c14e;
+  --scene-led-alert: #ff5c7a;
+  --scene-ground: #d3dde4;
+  --scene-ground-line: #bccbd6;
+  --scene-horizon: #0a736c;
   --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%234a5d6e' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
 }
 
@@ -244,6 +260,22 @@
   --grid-line: rgb(148 178 204 / 0.045);
   --grid-line-major: rgb(79 214 203 / 0.06);
   --shadow-panel: 0 1px 0 rgb(255 255 255 / 0.02) inset, 0 18px 40px -24px rgb(0 0 0 / 0.8);
+
+  /* pixel skyline on the sign-in pages: server racks at night */
+  --scene-star: rgb(190 214 232 / 0.55);
+  --scene-sun-1: #8ff3e8;
+  --scene-sun-2: #2cb3aa;
+  --scene-sun-3: #1b5f7a;
+  --scene-far: #0e1b29;
+  --scene-rack: #0a1420;
+  --scene-rack-edge: #1f3a52;
+  --scene-rack-line: #050a10;
+  --scene-led-ok: #4fd6cb;
+  --scene-led-warn: #f2c14e;
+  --scene-led-alert: #ff4d6d;
+  --scene-ground: #071019;
+  --scene-ground-line: #0f2132;
+  --scene-horizon: #2cb3aa;
   --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%238ea2b5' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
 }
 
