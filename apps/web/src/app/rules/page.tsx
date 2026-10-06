@@ -597,7 +597,7 @@ function RulesContent() {
               description={canEdit ? 'Create a rule above, or start from a quick preset.' : 'Rules your team creates will appear here.'}
             />
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto [contain:paint]">
               <table className="w-full min-w-[760px] text-[14px]">
                 <thead>
                   <tr className="border-b border-border text-left">

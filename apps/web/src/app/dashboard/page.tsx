@@ -188,7 +188,7 @@ function DashboardContent() {
         </Notice>
       )}
 
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile
           label="Servers online"
           value={value(servers?.online)}
@@ -221,13 +221,14 @@ function DashboardContent() {
 
       <div className="grid gap-6 xl:grid-cols-3">
         <Panel
-          className="xl:col-span-2"
+          className="min-w-0 xl:col-span-2"
           label="Detections"
           title="Recent alerts"
           bodyClassName="p-0"
           actions={
-            <Link href="/incidents" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-              View incidents
+            <Link href="/incidents" className={buttonVariants({ variant: 'ghost', size: 'sm' })} aria-label="View incidents">
+              <span className="hidden sm:inline">View incidents</span>
+              <span className="sm:hidden">All</span>
               <ArrowRight />
             </Link>
           }
@@ -241,15 +242,21 @@ function DashboardContent() {
           ) : summary && summary.recentAlerts.length > 0 ? (
             <ul className="divide-y divide-border">
               {summary.recentAlerts.map((a) => (
-                <li key={a.id} className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-accent/40">
-                  <SeverityBadge severity={a.rule.severity} className="w-[7.5rem] shrink-0" />
-                  <div className="min-w-0 flex-1">
+                <li
+                  key={a.id}
+                  className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-5 py-3.5 transition-colors hover:bg-accent/40"
+                >
+                  <SeverityBadge severity={a.rule.severity} className="shrink-0 sm:w-[7.5rem]" />
+                  {/* on phones the rule name gets its own line under the badge and time */}
+                  <div className="order-last w-full min-w-0 sm:order-none sm:w-auto sm:flex-1">
                     <p className="truncate text-[14px] font-semibold text-foreground">{a.rule.name}</p>
                     <p className="truncate font-mono text-[12px] text-muted-foreground">
                       {a.server ? a.server.name : 'no server · account or IP based'}
                     </p>
                   </div>
-                  <span className="shrink-0 font-mono text-[12px] tabular-nums text-muted-foreground">{timeAgo(a.createdAt)}</span>
+                  <span className="ml-auto shrink-0 font-mono text-[12px] tabular-nums text-muted-foreground sm:ml-0">
+                    {timeAgo(a.createdAt)}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -262,7 +269,7 @@ function DashboardContent() {
           )}
         </Panel>
 
-        <Panel label="Fleet" title="Server health" brackets>
+        <Panel label="Fleet" title="Server health" brackets className="min-w-0">
           {summaryLoading ? (
             <Skeleton className="block h-24 w-full" />
           ) : servers && servers.total > 0 ? (
@@ -353,62 +360,64 @@ function DashboardContent() {
           </form>
         )}
 
-        <table className="w-full text-[14px]">
-          <thead>
-            <tr className="border-b border-border text-left">
-              <th className="hud-label px-5 py-3 font-medium">Member</th>
-              <th className="hud-label px-5 py-3 font-medium">Role</th>
-              <th className="hud-label px-5 py-3 text-right font-medium">Joined</th>
-            </tr>
-          </thead>
-          <tbody>
-            {members.map((m) => (
-              <tr key={m.id} className="border-b border-border/70 transition-colors last:border-0 hover:bg-accent/40">
-                <td className="px-5 py-3">
-                  <div className="flex items-center gap-3">
-                    <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/12 font-mono text-[11px] font-semibold text-primary-bright">
-                      {m.email.slice(0, 2).toUpperCase()}
-                    </span>
-                    <span className="truncate font-medium text-foreground">
-                      {m.email}
-                      {m.id === user?.userId && <span className="ml-2 font-mono text-[11px] text-muted-foreground">(you)</span>}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-5 py-3">
-                  {canManageMembers && m.role !== 'OWNER' ? (
-                    <select
-                      value={m.role}
-                      onChange={(e) => handleRoleChange(m.id, e.target.value)}
-                      aria-label={`Role of ${m.email}`}
-                      className={cn(fieldSelectClass, 'h-8 w-48 text-[13px]')}
-                    >
-                      {ROLES.filter((r) => r !== 'OWNER').map((r) => (
-                        <option key={r} value={r}>
-                          {roleLabel(r)}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span
-                      className={cn(
-                        'inline-flex h-6 items-center rounded-md border px-2 font-mono text-[11px] font-semibold uppercase tracking-[0.08em]',
-                        m.role === 'OWNER'
-                          ? 'border-primary/30 bg-primary/10 text-primary-bright'
-                          : 'border-border-strong bg-surface-2 text-muted-foreground',
-                      )}
-                    >
-                      {roleLabel(m.role)}
-                    </span>
-                  )}
-                </td>
-                <td className="px-5 py-3 text-right font-mono text-[12.5px] tabular-nums text-muted-foreground">
-                  {formatDate(m.createdAt)}
-                </td>
+        <div className="overflow-x-auto [contain:paint]">
+          <table className="w-full min-w-[36rem] text-[14px]">
+            <thead>
+              <tr className="border-b border-border text-left">
+                <th className="hud-label px-5 py-3 font-medium">Member</th>
+                <th className="hud-label px-5 py-3 font-medium">Role</th>
+                <th className="hud-label px-5 py-3 text-right font-medium">Joined</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {members.map((m) => (
+                <tr key={m.id} className="border-b border-border/70 transition-colors last:border-0 hover:bg-accent/40">
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-3">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/12 font-mono text-[11px] font-semibold text-primary-bright">
+                        {m.email.slice(0, 2).toUpperCase()}
+                      </span>
+                      <span className="truncate font-medium text-foreground">
+                        {m.email}
+                        {m.id === user?.userId && <span className="ml-2 font-mono text-[11px] text-muted-foreground">(you)</span>}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-5 py-3">
+                    {canManageMembers && m.role !== 'OWNER' ? (
+                      <select
+                        value={m.role}
+                        onChange={(e) => handleRoleChange(m.id, e.target.value)}
+                        aria-label={`Role of ${m.email}`}
+                        className={cn(fieldSelectClass, 'h-8 w-48 text-[13px]')}
+                      >
+                        {ROLES.filter((r) => r !== 'OWNER').map((r) => (
+                          <option key={r} value={r}>
+                            {roleLabel(r)}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span
+                        className={cn(
+                          'inline-flex h-6 items-center rounded-md border px-2 font-mono text-[11px] font-semibold uppercase tracking-[0.08em]',
+                          m.role === 'OWNER'
+                            ? 'border-primary/30 bg-primary/10 text-primary-bright'
+                            : 'border-border-strong bg-surface-2 text-muted-foreground',
+                        )}
+                      >
+                        {roleLabel(m.role)}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-5 py-3 text-right font-mono text-[12.5px] tabular-nums text-muted-foreground">
+                    {formatDate(m.createdAt)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Panel>
     </div>
   );

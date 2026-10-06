@@ -187,7 +187,11 @@ function IncidentsContent() {
       {error && <Notice tone="error">{error}</Notice>}
 
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="inline-flex rounded-lg border border-border bg-surface-2/60 p-1" role="tablist" aria-label="Filter by status">
+        <div
+          className="inline-flex max-w-full overflow-x-auto rounded-lg border border-border bg-surface-2/60 p-1 [contain:paint]"
+          role="tablist"
+          aria-label="Filter by status"
+        >
           {FILTERS.map((f) => (
             <button
               key={f.value}

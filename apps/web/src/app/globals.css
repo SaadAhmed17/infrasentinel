@@ -127,14 +127,15 @@
   --popover-foreground: #0b1724;
   --primary: #0a736c;
   --primary-foreground: #ffffff;
-  --primary-bright: #0e958c;
+  /* light theme: the "bright" accent is a deeper teal so small accent text stays readable (≥ 5:1) */
+  --primary-bright: #08625c;
   --secondary: #dde5e9;
   --secondary-foreground: #0b1724;
   --muted: #dde5e9;
   --muted-foreground: #4a5d6e;
   --accent: #d9e7e8;
   --accent-foreground: #0b1724;
-  --destructive: #c8143f;
+  --destructive: #b8123a;
   --border: rgb(11 23 36 / 0.12);
   --border-strong: rgb(11 23 36 / 0.26);
   --input: rgb(11 23 36 / 0.2);
@@ -145,13 +146,14 @@
   --surface-3: #dde5e9;
   --hud: #2f4fe0;
 
-  --sev-critical: #c8143f;
-  --sev-high: #c2410c;
-  --sev-medium: #a16207;
-  --sev-low: #1d6fb8;
-  --status-online: #0f8a5f;
-  --status-offline: #c8143f;
-  --status-unknown: #64748b;
+  /* text colours checked at ≥ 5:1 on their own tinted badge background */
+  --sev-critical: #b8123a;
+  --sev-high: #a83a09;
+  --sev-medium: #8a5406;
+  --sev-low: #185f9f;
+  --status-online: #0a7550;
+  --status-offline: #b8123a;
+  --status-unknown: #556275;
 
   --chart-1: #0a736c;
   --chart-2: #2f4fe0;

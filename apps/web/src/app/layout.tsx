@@ -13,7 +13,8 @@ const unbounded = Unbounded({ subsets: ["latin"], variable: "--font-unbounded" }
 const silkscreen = Silkscreen({ subsets: ["latin"], weight: "400", variable: "--font-silkscreen" });
 
 export const metadata: Metadata = {
-  title: "InfraSentinel",
+  // pages set their own title, e.g. "Servers | InfraSentinel"
+  title: { default: "InfraSentinel", template: "%s | InfraSentinel" },
   description: "AI-Augmented Infrastructure Monitoring Platform",
 };
 

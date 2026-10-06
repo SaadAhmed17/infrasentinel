@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 
 // The reset token is part of this page's URL: never send it to other sites in the Referer header.
 export const metadata: Metadata = {
-  title: 'Reset password | InfraSentinel',
+  title: 'Reset password',
   referrer: 'no-referrer',
 };
 

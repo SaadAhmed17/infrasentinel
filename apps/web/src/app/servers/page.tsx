@@ -207,45 +207,47 @@ function ServersContent({
             }
           />
         ) : (
-          <table className="w-full text-[14px]">
-            <thead>
-              <tr className="border-b border-border text-left">
-                <th className="hud-label px-5 py-3 font-medium">Server</th>
-                <th className="hud-label px-5 py-3 font-medium">Status</th>
-                <th className="hud-label px-5 py-3 font-medium">Last heartbeat</th>
-                <th className="px-5 py-3">
-                  <span className="sr-only">Details</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {servers.map((s) => (
-                <tr key={s.id} className="group border-b border-border/70 transition-colors last:border-0 hover:bg-accent/40">
-                  <td className="px-5 py-3.5">
-                    <Link href={`/servers/${s.id}`} className="block rounded-sm">
-                      <span className="block font-semibold text-foreground">{s.name}</span>
-                      {s.hostname && <span className="block font-mono text-[12px] text-muted-foreground">{s.hostname}</span>}
-                    </Link>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <ServerStatusBadge status={s.status} />
-                  </td>
-                  <td className="px-5 py-3.5 font-mono text-[12.5px] tabular-nums text-muted-foreground">
-                    {timeSince(s.lastHeartbeat)}
-                  </td>
-                  <td className="px-5 py-3.5 text-right">
-                    <Link
-                      href={`/servers/${s.id}`}
-                      className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'group-hover:text-foreground')}
-                    >
-                      Details
-                      <ArrowRight />
-                    </Link>
-                  </td>
+          <div className="overflow-x-auto [contain:paint]">
+            <table className="w-full min-w-[36rem] text-[14px]">
+              <thead>
+                <tr className="border-b border-border text-left">
+                  <th className="hud-label px-5 py-3 font-medium">Server</th>
+                  <th className="hud-label px-5 py-3 font-medium">Status</th>
+                  <th className="hud-label px-5 py-3 font-medium">Last heartbeat</th>
+                  <th className="px-5 py-3">
+                    <span className="sr-only">Details</span>
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {servers.map((s) => (
+                  <tr key={s.id} className="group border-b border-border/70 transition-colors last:border-0 hover:bg-accent/40">
+                    <td className="px-5 py-3.5">
+                      <Link href={`/servers/${s.id}`} className="block rounded-sm">
+                        <span className="block font-semibold text-foreground">{s.name}</span>
+                        {s.hostname && <span className="block font-mono text-[12px] text-muted-foreground">{s.hostname}</span>}
+                      </Link>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <ServerStatusBadge status={s.status} />
+                    </td>
+                    <td className="px-5 py-3.5 font-mono text-[12.5px] tabular-nums text-muted-foreground">
+                      {timeSince(s.lastHeartbeat)}
+                    </td>
+                    <td className="px-5 py-3.5 text-right">
+                      <Link
+                        href={`/servers/${s.id}`}
+                        className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'group-hover:text-foreground')}
+                      >
+                        Details
+                        <ArrowRight />
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Panel>
     </div>
