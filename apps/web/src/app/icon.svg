@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <clipPath id="ribbon"><path d="M0 0 H38 V48 H100 V106 H40 V64 H0 Z"/></clipPath>
+    <clipPath id="tip"><path d="M0 0 H100 V130 H0 V100 H30 V80 H0 Z"/></clipPath>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#141e2a"/>
+  <g transform="translate(13.5 7.6) scale(0.37)">
+    <rect x="38" y="4" width="13" height="122" fill="#2f4b73"/>
+    <rect x="51" y="4" width="13" height="122" fill="#5b7c99"/>
+    <g clip-path="url(#tip)" fill="none" stroke-width="17">
+      <path d="M60 16 C 40 15, 20 22, 18 40 C 16 58, 36 64, 52 70 C 72 77, 86 86, 84 102 C 82 116, 66 121, 48 121 C 34 121, 18 114, 16 100 L 16 88" stroke="#27416a"/>
+      <path d="M60 16 C 40 15, 20 22, 18 40 C 16 58, 36 64, 52 70 C 72 77, 86 86, 84 102 C 82 116, 66 121, 48 121 C 34 121, 18 114, 16 100 L 16 88" stroke="#2cb3aa" clip-path="url(#ribbon)"/>
+      <path d="M60 16 C 40 15, 20 22, 18 40 C 16 58, 36 64, 52 70 C 72 77, 86 86, 84 102 C 82 116, 66 121, 48 121 C 34 121, 18 114, 16 100 L 16 88" stroke="#27416a" transform="translate(3.4 -3.4)"/>
+    </g>
+    <path d="M64 16 C 78 16, 88 27, 88 50" fill="none" stroke="#2cb3aa" stroke-width="15"/>
+    <rect x="38" y="4" width="13" height="47" fill="#2f4b73"/>
+    <rect x="51" y="4" width="13" height="47" fill="#5b7c99"/>
+    <rect x="38" y="104" width="13" height="22" fill="#2f4b73"/>
+    <rect x="51" y="104" width="13" height="22" fill="#5b7c99"/>
+    <rect x="34" y="4" width="17" height="8" fill="#2f4b73"/>
+    <rect x="51" y="4" width="17" height="8" fill="#5b7c99"/>
+    <rect x="34" y="118" width="17" height="8" fill="#2f4b73"/>
+    <rect x="51" y="118" width="17" height="8" fill="#5b7c99"/>
+    <rect x="38" y="24.5" width="26" height="1.5" fill="#141e2a"/>
+    <rect x="38" y="37" width="26" height="1.5" fill="#141e2a"/>
+    <rect x="38" y="49.5" width="26" height="1.5" fill="#141e2a"/>
+    <rect x="54.75" y="15.5" width="5.5" height="5.5" fill="#141e2a"/>
+    <rect x="54.75" y="28.75" width="5.5" height="5.5" fill="#141e2a"/>
+    <rect x="54.75" y="41.25" width="5.5" height="5.5" fill="#141e2a"/>
+  </g>
+</svg>

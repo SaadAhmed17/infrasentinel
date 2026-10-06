@@ -1,0 +1,14 @@
+// One look for every form control in the app. Native <input>/<select> elements
+// use these classes so forms stay consistent across pages and themes.
+export const fieldLabelClass =
+  'mb-1.5 block font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground';
+
+export const fieldControlClass =
+  'h-10 w-full rounded-lg border border-input bg-surface-2 px-3 text-[14px] text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted-foreground/70 hover:border-border-strong focus-visible:border-primary focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60 aria-invalid:border-destructive';
+
+export const fieldSelectClass = `${fieldControlClass} select-chevron cursor-pointer`;
+
+export const fieldHintClass = 'mt-1.5 text-[12.5px] text-muted-foreground';
+
+export const fieldErrorClass =
+  'flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/10 px-3.5 py-2.5 text-[13.5px] font-medium text-destructive';
