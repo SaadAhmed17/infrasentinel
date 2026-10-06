@@ -16,7 +16,13 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, organizationName: string) => Promise<void>;
+  acceptInvitation: (token: string, password: string) => Promise<void>;
   logout: () => void;
+}
+
+interface Tokens {
+  accessToken: string;
+  refreshToken: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -40,8 +46,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   }, []);
 
-  async function login(email: string, password: string) {
-    const data = await apiClient.post<{ accessToken: string; refreshToken: string }>('/auth/login', { email, password });
+  // Saves the tokens, sets the signed-in user and opens the dashboard.
+  function startSession(data: Tokens) {
     localStorage.setItem('accessToken', data.accessToken);
     localStorage.setItem('refreshToken', data.refreshToken);
     const payload = JSON.parse(atob(data.accessToken.split('.')[1]));
@@ -49,13 +55,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.push('/dashboard');
   }
 
+  async function login(email: string, password: string) {
+    startSession(await apiClient.post<Tokens>('/auth/login', { email, password }));
+  }
+
   async function signup(email: string, password: string, organizationName: string) {
-    const data = await apiClient.post<{ accessToken: string; refreshToken: string }>('/auth/signup', { email, password, organizationName });
-    localStorage.setItem('accessToken', data.accessToken);
-    localStorage.setItem('refreshToken', data.refreshToken);
-    const payload = JSON.parse(atob(data.accessToken.split('.')[1]));
-    setUser({ userId: payload.sub, email: payload.email, role: payload.role, organizationId: payload.organizationId });
-    router.push('/dashboard');
+    startSession(await apiClient.post<Tokens>('/auth/signup', { email, password, organizationName }));
+  }
+
+  async function acceptInvitation(token: string, password: string) {
+    startSession(await apiClient.post<Tokens>('/auth/accept-invitation', { token, password }));
   }
 
   function logout() {
@@ -66,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, acceptInvitation, logout }}>
       {children}
     </AuthContext.Provider>
   );

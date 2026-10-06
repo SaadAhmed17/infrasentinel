@@ -2,9 +2,9 @@
 
 import { Suspense, useState } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { Check, Loader2, Lock } from 'lucide-react';
-import { apiClient } from '@/lib/api-client';
+import { useAuth } from '@/contexts/auth-context';
 import { AuthShell, authButtonClassName, authLinkClassName } from '@/components/auth-shell';
 import { IconInput, PasswordVisibilityToggle } from '@/components/ui/icon-input';
 import { Label } from '@/components/ui/label';
@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 
 function AcceptInviteForm() {
   const searchParams = useSearchParams();
-  const router = useRouter();
+  const { acceptInvitation } = useAuth();
   const token = searchParams.get('token');
 
   const [password, setPassword] = useState('');
@@ -33,18 +33,8 @@ function AcceptInviteForm() {
     setLoading(true);
 
     try {
-      const data = await apiClient.post<{
-        accessToken: string;
-        refreshToken: string;
-      }>('/auth/accept-invitation', {
-        token,
-        password,
-      });
-
-      localStorage.setItem('accessToken', data.accessToken);
-      localStorage.setItem('refreshToken', data.refreshToken);
-
-      router.push('/dashboard');
+      // Signs the new member in, like login and signup, and opens the dashboard.
+      await acceptInvitation(token, password);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to accept invitation');
     } finally {
