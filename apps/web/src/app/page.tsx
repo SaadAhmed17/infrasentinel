@@ -3,47 +3,9 @@ import { PublicNavbar } from '@/components/public-navbar';
 import { PublicFooter } from '@/components/public-footer';
 import {
   ShieldCheck,
-  Server,
-  Bot,
-  ListChecks,
-  LayoutDashboard,
-  Siren,
   ArrowRight,
   CheckCircle2,
 } from 'lucide-react';
-
-const SERVICES = [
-  {
-    icon: Server,
-    title: 'Live Server Monitoring',
-    desc: 'CPU, memory, disk, network, and more, streamed from every registered server in real time.',
-  },
-  {
-    icon: ListChecks,
-    title: 'SIEM Rule Engine',
-    desc: 'Six rule types detect brute-force logins, unauthorized root access, credential stuffing, API abuse, and more.',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'AI Anomaly Detection',
-    desc: 'An LSTM-Autoencoder trained per server flags unusual behaviour that static thresholds miss.',
-  },
-  {
-    icon: Bot,
-    title: 'AI Incident Assistant',
-    desc: 'Ask questions about any incident in plain language and get answers grounded in real, indexed data.',
-  },
-  {
-    icon: Siren,
-    title: 'Alert & Incident Management',
-    desc: 'Related alerts are automatically grouped into incidents you can triage and resolve.',
-  },
-  {
-    icon: LayoutDashboard,
-    title: 'Live Dashboard',
-    desc: 'See server health, open incidents, and active rules at a glance, updating in real time.',
-  },
-];
 
 const STEPS = [
   {
@@ -140,7 +102,7 @@ export default function Home() {
                 </Link>
 
                 <Link
-                  href="#services"
+                  href="/services"
                   className="flex min-h-12 items-center justify-center rounded-xl border border-slate-700/80 bg-white/[0.025] px-7 py-3 text-[14px] font-semibold text-slate-200 transition-all duration-300 hover:border-slate-600 hover:bg-white/[0.06]"
                 >
                   See what it does
@@ -195,101 +157,32 @@ export default function Home() {
       </section>
 
       {/* =========================================================
-          SERVICES
+          CAPABILITIES TEASER (links to /services)
       ========================================================= */}
-      <section
-        id="services"
-        className="relative border-t border-slate-800/80 bg-[#0b0f17] py-24"
-      >
-        <div
-          className="pointer-events-none absolute left-0 top-20 h-80 w-80 rounded-full opacity-20 blur-3xl"
-          style={{
-            background:
-              'radial-gradient(circle, rgba(59,130,246,0.16), transparent 70%)',
-          }}
-        />
+      <section className="border-t border-slate-800/80 bg-[#0b0f17] py-12">
+        <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-5 px-6 sm:flex-row sm:items-center">
+          <div>
+            <h3 className="text-[18px] font-bold text-white">
+              Six capabilities. One platform.
+            </h3>
 
-        <div className="relative mx-auto max-w-6xl px-6">
-          <div className="mx-auto max-w-2xl text-center">
-            <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.18em] text-blue-400">
-              Platform capabilities
-            </div>
-
-            <h2 className="text-[30px] font-bold tracking-tight text-white sm:text-[36px]">
-              What InfraSentinel provides
-            </h2>
-
-            <p className="mt-4 text-[15px] leading-7 text-slate-400">
-              Three capabilities that are usually spread across separate
-              tools, combined into one platform.
+            <p className="mt-1 text-[13px] text-slate-400">
+              Monitoring, SIEM rules, AI anomaly detection, incident
+              assistant, and more.
             </p>
           </div>
 
-          <div className="mt-14 grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-center">
+          <Link
+            href="/services"
+            className="group inline-flex shrink-0 items-center gap-2 rounded-xl border border-blue-400/20 bg-blue-500/[0.08] px-5 py-2.5 text-[13px] font-semibold text-blue-300 transition-all duration-300 hover:border-blue-400/40 hover:bg-blue-500/[0.14]"
+          >
+            Explore all services
 
-            <div className="group relative overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900/50 p-1 shadow-[0_25px_70px_rgba(0,0,0,0.25)]">
-              <div className="overflow-hidden rounded-[13px]">
-
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="https://images.pexels.com/photos/5480781/pexels-photo-5480781.jpeg?auto=compress&cs=tinysrgb&w=1200"
-                  alt="Security monitoring and access control"
-                  className="aspect-[4/3] w-full object-cover transition-transform duration-700 group-hover:scale-[1.025]"
-                />
-
-              </div>
-
-              <div className="pointer-events-none absolute inset-x-1 bottom-1 h-1/2 rounded-b-[13px] bg-gradient-to-t from-[#080b12]/70 to-transparent" />
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {SERVICES.slice(0, 4).map((s) => (
-                <div
-                  key={s.title}
-                  className="group rounded-2xl border border-slate-800 bg-[#10151f]/80 p-5 shadow-[0_10px_35px_rgba(0,0,0,0.12)] transition-all duration-300 hover:-translate-y-1 hover:border-blue-500/30 hover:bg-[#121a27] hover:shadow-[0_15px_40px_rgba(0,0,0,0.22)]"
-                >
-                  <div className="mb-4 flex size-11 items-center justify-center rounded-xl border border-blue-400/10 bg-blue-500/[0.09] transition-colors duration-300 group-hover:bg-blue-500/[0.14]">
-                    <s.icon
-                      className="size-5 text-blue-400"
-                      strokeWidth={1.9}
-                    />
-                  </div>
-
-                  <h3 className="text-[15px] font-bold leading-6 text-white">
-                    {s.title}
-                  </h3>
-
-                  <p className="mt-2 text-[13px] leading-6 text-slate-400">
-                    {s.desc}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {SERVICES.slice(4).map((s) => (
-              <div
-                key={s.title}
-                className="group rounded-2xl border border-slate-800 bg-[#10151f]/80 p-5 shadow-[0_10px_35px_rgba(0,0,0,0.12)] transition-all duration-300 hover:-translate-y-1 hover:border-blue-500/30 hover:bg-[#121a27] hover:shadow-[0_15px_40px_rgba(0,0,0,0.22)]"
-              >
-                <div className="mb-4 flex size-11 items-center justify-center rounded-xl border border-blue-400/10 bg-blue-500/[0.09]">
-                  <s.icon
-                    className="size-5 text-blue-400"
-                    strokeWidth={1.9}
-                  />
-                </div>
-
-                <h3 className="text-[15px] font-bold leading-6 text-white">
-                  {s.title}
-                </h3>
-
-                <p className="mt-2 text-[13px] leading-6 text-slate-400">
-                  {s.desc}
-                </p>
-              </div>
-            ))}
-          </div>
+            <ArrowRight
+              className="size-4 transition-transform duration-300 group-hover:translate-x-1"
+              strokeWidth={2.5}
+            />
+          </Link>
         </div>
       </section>
 
