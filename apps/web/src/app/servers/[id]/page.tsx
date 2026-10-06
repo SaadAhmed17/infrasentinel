@@ -1,22 +1,31 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import { ArrowLeft, BrainCircuit, Cpu, Gauge, HardDrive, MemoryStick, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { ProtectedRoute } from '@/components/protected-route';
 import { AppShell } from '@/components/app-shell';
 import { apiClient } from '@/lib/api-client';
-import {
-  ArrowLeft,
-  Cpu,
-  MemoryStick,
-  HardDrive,
-  Gauge,
-  ShieldAlert,
-  ShieldCheck,
-  Activity,
-} from 'lucide-react';
+import { axisProps, gridProps, tooltipProps } from '@/lib/chart-theme';
+import { buttonVariants } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Notice } from '@/components/ui/notice';
+import { Panel } from '@/components/ui/panel';
+import { StatTile } from '@/components/ui/stat-tile';
+import { ServerStatusBadge } from '@/components/ui/status';
+import { TONE_COLOR, type Tone } from '@/components/ui/tone';
 
 interface Metric {
   id: string;
@@ -33,7 +42,7 @@ interface Metric {
 }
 
 interface ServerDetail {
-  server: { id: string; name: string; status: string; lastHeartbeat: string | null };
+  server: { id: string; name: string; hostname?: string | null; status: string; lastHeartbeat: string | null };
   metrics: Metric[];
 }
 interface AnomalyScore {
@@ -43,41 +52,172 @@ interface AnomalyScore {
   error?: string;
 }
 
-const GRID_STROKE = 'var(--border)';
-const AXIS_STYLE = { fontSize: 11, fill: 'var(--muted-foreground)' };
+const SERIES = {
+  cpu: 'var(--chart-1)',
+  memory: 'var(--chart-2)',
+  disk: 'var(--chart-3)',
+  read: 'var(--chart-2)',
+  write: 'var(--chart-3)',
+  netIn: 'var(--chart-1)',
+  netOut: 'var(--chart-4)',
+  processes: 'var(--chart-2)',
+  load: 'var(--chart-5)',
+};
 
-function ChartCard({ title, height, children }: { title: string; height: number; children: React.ReactNode }) {
+function formatRate(value: number | null | undefined) {
+  if (value == null) return '—';
+  const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+  let v = value;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v >= 100 || i === 0 ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`;
+}
+
+function timeSince(dateStr: string | null) {
+  if (!dateStr) return 'never';
+  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  return `${Math.floor(seconds / 3600)}h ago`;
+}
+
+function usageTone(value: number): Tone {
+  if (value >= 90) return 'critical';
+  if (value >= 75) return 'medium';
+  return 'primary';
+}
+
+function Meter({ value, tone }: { value: number; tone: Tone }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-      <h2 className="mb-4 text-[16px] font-bold text-foreground">{title}</h2>
-      <ResponsiveContainer width="100%" height={height}>
-        {children as React.ReactElement}
-      </ResponsiveContainer>
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted" aria-hidden>
+      <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${Math.min(100, Math.max(0, value))}%`, background: TONE_COLOR[tone] }} />
     </div>
   );
 }
 
-function SnapshotCard({
-  icon: Icon,
+function Legend({ items }: { items: { label: string; color: string }[] }) {
+  return (
+    <div className="hidden flex-wrap items-center gap-4 sm:flex">
+      {items.map((item) => (
+        <span key={item.label} className="inline-flex items-center gap-1.5 font-mono text-[12px] text-muted-foreground">
+          <span className="h-0.5 w-3.5 rounded-full" style={{ background: item.color }} aria-hidden />
+          {item.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ChartPanel({
   label,
-  value,
-  tone,
+  title,
+  legend,
+  height,
+  className,
+  children,
 }: {
-  icon: React.ElementType;
   label: string;
-  value: string;
-  tone: string;
+  title: string;
+  legend: { label: string; color: string }[];
+  height: number;
+  className?: string;
+  children: ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3.5 rounded-xl border border-border bg-card p-4 shadow-sm">
-      <div className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${tone}`}>
-        <Icon className="size-4.5" strokeWidth={2.1} />
+    <Panel label={label} title={title} actions={<Legend items={legend} />} className={className} bodyClassName="px-3 pb-3 pt-5">
+      <div style={{ height }}>
+        <ResponsiveContainer width="100%" height="100%">
+          {children as React.ReactElement}
+        </ResponsiveContainer>
       </div>
-      <div>
-        <p className="text-[24px] font-bold leading-none tracking-tight text-foreground">{value}</p>
-        <p className="mt-1 text-[13.5px] font-bold text-muted-foreground">{label}</p>
+    </Panel>
+  );
+}
+
+function AnomalyPanel({ score, checked }: { score: AnomalyScore | null; checked: boolean }) {
+  if (!checked) {
+    return (
+      <Panel label="LSTM model" title="Anomaly detection">
+        <div className="h-36 animate-pulse rounded-lg bg-muted" />
+      </Panel>
+    );
+  }
+
+  if (!score || score.error || score.reconstructionError == null || score.threshold == null) {
+    return (
+      <Panel label="LSTM model" title="Anomaly detection">
+        <div className="flex items-start gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+            <BrainCircuit className="size-[18px]" strokeWidth={1.8} />
+          </span>
+          <div>
+            <p className="text-[14.5px] font-semibold text-foreground">Score not available yet</p>
+            <p className="mt-1.5 text-[13.5px] leading-relaxed text-muted-foreground">
+              A score appears here once an LSTM model has been trained on this server&apos;s history and the AI
+              service is reachable.
+            </p>
+          </div>
+        </div>
+      </Panel>
+    );
+  }
+
+  const ratio = score.reconstructionError / score.threshold;
+  const tone: Tone = score.isAnomaly ? 'critical' : 'online';
+  const Icon = score.isAnomaly ? ShieldAlert : ShieldCheck;
+  return (
+    <Panel label="LSTM model" title="Anomaly detection" brackets>
+      <div className="flex items-start gap-3">
+        <span
+          className="flex size-9 shrink-0 items-center justify-center rounded-lg"
+          style={{ color: TONE_COLOR[tone], background: `color-mix(in oklab, ${TONE_COLOR[tone]} 14%, transparent)` }}
+        >
+          <Icon className="size-[18px]" strokeWidth={1.9} />
+        </span>
+        <div>
+          <p className="text-[15px] font-semibold" style={{ color: TONE_COLOR[tone] }}>
+            {score.isAnomaly ? 'Anomaly detected' : 'Normal behaviour'}
+          </p>
+          <p className="mt-1 text-[13.5px] text-muted-foreground">
+            {score.isAnomaly
+              ? 'Recent readings do not match what the model learned for this server.'
+              : 'Recent readings match what the model learned for this server.'}
+          </p>
+        </div>
       </div>
-    </div>
+
+      {/* error against threshold; the marker sits in the middle of the bar */}
+      <div className="mt-6">
+        <div className="relative h-2 overflow-hidden rounded-full bg-muted">
+          <div className="h-full rounded-full" style={{ width: `${Math.min(100, ratio * 50)}%`, background: TONE_COLOR[tone] }} />
+        </div>
+        <div className="relative mt-1 h-3">
+          <span className="absolute left-1/2 top-0 h-3 w-px -translate-x-1/2 bg-border-strong" aria-hidden />
+        </div>
+        <dl className="mt-1 grid grid-cols-2 gap-3 font-mono text-[12px]">
+          <div>
+            <dt className="text-muted-foreground">Reconstruction error</dt>
+            <dd className="mt-0.5 text-[14px] text-foreground">{score.reconstructionError.toFixed(4)}</dd>
+          </div>
+          <div className="text-right">
+            <dt className="text-muted-foreground">Threshold</dt>
+            <dd className="mt-0.5 text-[14px] text-foreground">{score.threshold.toFixed(4)}</dd>
+          </div>
+        </dl>
+      </div>
+    </Panel>
+  );
+}
+
+function BackToServers() {
+  return (
+    <Link href="/servers" className={buttonVariants({ variant: 'outline' })}>
+      <ArrowLeft />
+      All servers
+    </Link>
   );
 }
 
@@ -87,22 +227,24 @@ function ServerDetailContent() {
   const [data, setData] = useState<ServerDetail | null>(null);
   const [error, setError] = useState('');
   const [anomalyScore, setAnomalyScore] = useState<AnomalyScore | null>(null);
-
-  function loadAnomalyScore() {
-    apiClient
-      .get<AnomalyScore>(`/servers/${serverId}/anomaly-score`)
-      .then(setAnomalyScore)
-      .catch(() => setAnomalyScore(null));
-  }
-
-  function loadData() {
-    apiClient
-      .get<ServerDetail>(`/servers/${serverId}/metrics?limit=50`)
-      .then(setData)
-      .catch((err) => setError(err.message));
-  }
+  const [anomalyChecked, setAnomalyChecked] = useState(false);
 
   useEffect(() => {
+    function loadAnomalyScore() {
+      apiClient
+        .get<AnomalyScore>(`/servers/${serverId}/anomaly-score`)
+        .then(setAnomalyScore)
+        .catch(() => setAnomalyScore(null))
+        .finally(() => setAnomalyChecked(true));
+    }
+
+    function loadData() {
+      apiClient
+        .get<ServerDetail>(`/servers/${serverId}/metrics?limit=50`)
+        .then(setData)
+        .catch((err) => setError(err.message));
+    }
+
     loadData();
     loadAnomalyScore();
     const interval = setInterval(() => {
@@ -112,31 +254,36 @@ function ServerDetailContent() {
     return () => clearInterval(interval);
   }, [serverId]);
 
-  const title = data?.server.name ?? 'Server';
-
   if (error) {
     return (
-      <AppShell title="Server">
-        <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[14px] font-medium text-red-600 dark:text-red-400">
-          {error}
-        </div>
+      <AppShell title="Server" actions={<BackToServers />}>
+        <Notice tone="error">{error}</Notice>
       </AppShell>
     );
   }
 
   if (!data) {
     return (
-      <AppShell title="Server">
-        <div className="space-y-4">
-          <div className="h-10 w-64 animate-pulse rounded-lg bg-muted" />
-          <div className="h-64 animate-pulse rounded-xl bg-muted" />
+      <AppShell title="Server" actions={<BackToServers />}>
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-32 animate-pulse rounded-xl bg-muted" />
+            ))}
+          </div>
+          <div className="h-80 animate-pulse rounded-xl bg-muted" />
         </div>
       </AppShell>
     );
   }
 
   const chartData = data.metrics.map((m) => ({
-    time: new Date(m.timestamp).toLocaleTimeString(),
+    time: new Date(m.timestamp).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }),
     CPU: m.cpuUsage,
     Memory: m.memUsage,
     Disk: m.diskUsage,
@@ -149,138 +296,153 @@ function ServerDetailContent() {
   }));
 
   const latest = data.metrics[data.metrics.length - 1];
+  const { server } = data;
 
   return (
-    <AppShell title={title}>
-      <Link
-        href="/servers"
-        className="mb-4 inline-flex items-center gap-1.5 text-[14px] font-bold text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" strokeWidth={2.25} />
-        Servers
-      </Link>
-
-      {anomalyScore && !anomalyScore.error && (
-        <div
-          className={`mb-5 flex items-center gap-3 rounded-xl border p-4 ${
-            anomalyScore.isAnomaly
-              ? 'border-red-500/20 bg-red-500/10'
-              : 'border-emerald-500/20 bg-emerald-500/10'
-          }`}
-        >
-          <div
-            className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${
-              anomalyScore.isAnomaly
-                ? 'bg-red-500/15 text-red-600 dark:text-red-400'
-                : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-            }`}
-          >
-            {anomalyScore.isAnomaly ? (
-              <ShieldAlert className="size-4.5" strokeWidth={2} />
-            ) : (
-              <ShieldCheck className="size-4.5" strokeWidth={2} />
-            )}
-          </div>
-          <div>
-            <p className="text-[15px] font-bold text-foreground">
-              {anomalyScore.isAnomaly ? 'Anomaly Detected' : 'Normal Behavior'}
-            </p>
-            <p className="text-[13px] font-medium text-muted-foreground">
-              LSTM reconstruction error: {anomalyScore.reconstructionError?.toFixed(4)} · threshold:{' '}
-              {anomalyScore.threshold?.toFixed(4)}
-            </p>
-          </div>
-        </div>
-      )}
-
+    <AppShell
+      title={server.name}
+      description={
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <ServerStatusBadge status={server.status} />
+          <span className="font-mono text-[12.5px]">last report {timeSince(server.lastHeartbeat)}</span>
+          {server.hostname && <span className="font-mono text-[12.5px]">{server.hostname}</span>}
+        </span>
+      }
+      actions={<BackToServers />}
+    >
       {data.metrics.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-border bg-card px-5 py-14 text-center shadow-sm">
-          <div className="flex size-10 items-center justify-center rounded-full bg-muted">
-            <Activity className="size-4.5 text-muted-foreground" strokeWidth={1.75} />
-          </div>
-          <p className="text-[15px] font-bold text-foreground">No metrics yet</p>
-          <p className="text-[14px] text-muted-foreground">
-            Make sure the agent is running and pushing to this server&apos;s API key.
-          </p>
-        </div>
+        <Panel bodyClassName="p-0">
+          <EmptyState
+            art="server"
+            title="No metrics yet"
+            description="Start the agent on this server with its key. Readings appear here within about 10 seconds."
+          />
+        </Panel>
       ) : (
-        <div className="space-y-5">
-          {/* Latest snapshot */}
-          <div className="grid grid-cols-4 gap-4">
-            <SnapshotCard
-              icon={Cpu}
-              label="CPU Usage"
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+            <StatTile
+              label="CPU"
               value={`${latest.cpuUsage.toFixed(0)}%`}
-              tone="bg-blue-500/15 text-blue-600 dark:text-blue-400"
+              tone={usageTone(latest.cpuUsage)}
+              icon={Cpu}
+              hint={<Meter value={latest.cpuUsage} tone={usageTone(latest.cpuUsage)} />}
             />
-            <SnapshotCard
-              icon={MemoryStick}
-              label="Memory Usage"
+            <StatTile
+              label="Memory"
               value={`${latest.memUsage.toFixed(0)}%`}
-              tone="bg-amber-500/15 text-amber-600 dark:text-amber-400"
+              tone={usageTone(latest.memUsage)}
+              icon={MemoryStick}
+              hint={<Meter value={latest.memUsage} tone={usageTone(latest.memUsage)} />}
             />
-            <SnapshotCard
-              icon={HardDrive}
-              label="Disk Usage"
+            <StatTile
+              label="Disk"
               value={`${latest.diskUsage.toFixed(0)}%`}
-              tone="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+              tone={usageTone(latest.diskUsage)}
+              icon={HardDrive}
+              hint={<Meter value={latest.diskUsage} tone={usageTone(latest.diskUsage)} />}
             />
-            <SnapshotCard
-              icon={Gauge}
-              label="Load Average"
+            <StatTile
+              label="Load average"
               value={latest.loadAverage != null ? latest.loadAverage.toFixed(2) : '—'}
-              tone="bg-[oklch(0.62_0.19_265)]/15 text-[oklch(0.55_0.19_265)] dark:text-[oklch(0.72_0.15_265)]"
+              tone="primary"
+              icon={Gauge}
+              hint={latest.loadAverage != null ? `${latest.processCount ?? '—'} processes` : 'not reported by this agent'}
             />
           </div>
 
-          <ChartCard title="Resource Usage (%)" height={280}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
-              <XAxis dataKey="time" tick={AXIS_STYLE} />
-              <YAxis domain={[0, 100]} tick={AXIS_STYLE} unit="%" />
-              <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Line type="monotone" dataKey="CPU" stroke="#3b82f6" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="Memory" stroke="#f59e0b" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="Disk" stroke="#10b981" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ChartCard>
-
-          <ChartCard title="Network Throughput (bytes/sec)" height={240}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
-              <XAxis dataKey="time" tick={AXIS_STYLE} />
-              <YAxis tick={AXIS_STYLE} />
-              <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Line type="monotone" dataKey="NetworkIn" stroke="#8b5cf6" strokeWidth={2} dot={false} connectNulls />
-              <Line type="monotone" dataKey="NetworkOut" stroke="#ec4899" strokeWidth={2} dot={false} connectNulls />
-            </LineChart>
-          </ChartCard>
-
-          <div className="grid grid-cols-2 gap-5">
-            <ChartCard title="Disk I/O (bytes/sec)" height={220}>
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
-                <XAxis dataKey="time" tick={AXIS_STYLE} />
-                <YAxis tick={AXIS_STYLE} />
-                <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="DiskRead" stroke="#06b6d4" strokeWidth={2} dot={false} connectNulls />
-                <Line type="monotone" dataKey="DiskWrite" stroke="#f97316" strokeWidth={2} dot={false} connectNulls />
+          <div className="grid gap-6 xl:grid-cols-3">
+            <ChartPanel
+              className="xl:col-span-2"
+              label="Last 50 readings"
+              title="Resource usage"
+              height={260}
+              legend={[
+                { label: 'CPU', color: SERIES.cpu },
+                { label: 'Memory', color: SERIES.memory },
+                { label: 'Disk', color: SERIES.disk },
+              ]}
+            >
+              <LineChart data={chartData} margin={{ top: 4, right: 28, bottom: 0, left: -12 }}>
+                <CartesianGrid {...gridProps} />
+                <XAxis dataKey="time" {...axisProps} minTickGap={48} />
+                <YAxis domain={[0, 100]} unit="%" {...axisProps} width={48} />
+                <Tooltip {...tooltipProps} formatter={(v) => `${Number(v).toFixed(1)}%`} />
+                <Line type="monotone" dataKey="CPU" stroke={SERIES.cpu} strokeWidth={2} dot={false} isAnimationActive={false} />
+                <Line type="monotone" dataKey="Memory" stroke={SERIES.memory} strokeWidth={2} dot={false} isAnimationActive={false} />
+                <Line type="monotone" dataKey="Disk" stroke={SERIES.disk} strokeWidth={2} dot={false} isAnimationActive={false} />
               </LineChart>
-            </ChartCard>
-            <ChartCard title="Processes & Load" height={220}>
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
-                <XAxis dataKey="time" tick={AXIS_STYLE} />
-                <YAxis tick={AXIS_STYLE} />
-                <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="Processes" stroke="#6366f1" strokeWidth={2} dot={false} connectNulls />
-                <Line type="monotone" dataKey="LoadAvg" stroke="#84cc16" strokeWidth={2} dot={false} connectNulls />
+            </ChartPanel>
+            <AnomalyPanel score={anomalyScore} checked={anomalyChecked} />
+          </div>
+
+          <ChartPanel
+            label="Network"
+            title="Throughput"
+            height={220}
+            legend={[
+              { label: 'In', color: SERIES.netIn },
+              { label: 'Out', color: SERIES.netOut },
+            ]}
+          >
+            <AreaChart data={chartData} margin={{ top: 4, right: 28, bottom: 0, left: 4 }}>
+              <defs>
+                <linearGradient id="net-in" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={SERIES.netIn} stopOpacity={0.28} />
+                  <stop offset="100%" stopColor={SERIES.netIn} stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="net-out" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={SERIES.netOut} stopOpacity={0.22} />
+                  <stop offset="100%" stopColor={SERIES.netOut} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid {...gridProps} />
+              <XAxis dataKey="time" {...axisProps} minTickGap={48} />
+              <YAxis {...axisProps} width={72} tickFormatter={(v) => formatRate(Number(v))} />
+              <Tooltip {...tooltipProps} formatter={(v) => formatRate(Number(v))} />
+              <Area type="monotone" dataKey="NetworkIn" name="In" stroke={SERIES.netIn} strokeWidth={2} fill="url(#net-in)" connectNulls isAnimationActive={false} />
+              <Area type="monotone" dataKey="NetworkOut" name="Out" stroke={SERIES.netOut} strokeWidth={2} fill="url(#net-out)" connectNulls isAnimationActive={false} />
+            </AreaChart>
+          </ChartPanel>
+
+          <div className="grid gap-6 xl:grid-cols-2">
+            <ChartPanel
+              label="Storage"
+              title="Disk I/O"
+              height={200}
+              legend={[
+                { label: 'Read', color: SERIES.read },
+                { label: 'Write', color: SERIES.write },
+              ]}
+            >
+              <LineChart data={chartData} margin={{ top: 4, right: 28, bottom: 0, left: 4 }}>
+                <CartesianGrid {...gridProps} />
+                <XAxis dataKey="time" {...axisProps} minTickGap={48} />
+                <YAxis {...axisProps} width={72} tickFormatter={(v) => formatRate(Number(v))} />
+                <Tooltip {...tooltipProps} formatter={(v) => formatRate(Number(v))} />
+                <Line type="monotone" dataKey="DiskRead" name="Read" stroke={SERIES.read} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+                <Line type="monotone" dataKey="DiskWrite" name="Write" stroke={SERIES.write} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
               </LineChart>
-            </ChartCard>
+            </ChartPanel>
+            <ChartPanel
+              label="System"
+              title="Processes and load"
+              height={200}
+              legend={[
+                { label: 'Processes', color: SERIES.processes },
+                { label: 'Load', color: SERIES.load },
+              ]}
+            >
+              <LineChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -12 }}>
+                <CartesianGrid {...gridProps} />
+                <XAxis dataKey="time" {...axisProps} minTickGap={48} />
+                <YAxis yAxisId="processes" {...axisProps} width={48} />
+                <YAxis yAxisId="load" orientation="right" {...axisProps} width={40} />
+                <Tooltip {...tooltipProps} />
+                <Line yAxisId="processes" type="monotone" dataKey="Processes" stroke={SERIES.processes} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+                <Line yAxisId="load" type="monotone" dataKey="LoadAvg" name="Load" stroke={SERIES.load} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+              </LineChart>
+            </ChartPanel>
           </div>
         </div>
       )}
