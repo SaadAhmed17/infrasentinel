@@ -3,6 +3,8 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
+import { AppBackground } from '@/components/app-background';
+import { LogoMark } from '@/components/brand/logo';
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -15,7 +17,15 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }, [loading, user, router]);
 
   if (loading) {
-    return <div className="flex min-h-screen items-center justify-center">Loading...</div>;
+    return (
+      <div className="relative flex min-h-screen items-center justify-center" role="status">
+        <AppBackground />
+        <div className="relative z-10 flex flex-col items-center gap-4">
+          <LogoMark className="w-10" blink title="Loading" />
+          <p className="hud-label">Loading workspace</p>
+        </div>
+      </div>
+    );
   }
 
   if (!user) {
