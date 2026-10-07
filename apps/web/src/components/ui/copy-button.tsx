@@ -41,6 +41,32 @@ export function CopyButton({
   );
 }
 
+/** Icon-only copy button for short inline values (a hostname). */
+export function CopyIconButton({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 1500);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+    } catch {
+      // clipboard blocked; the value stays selectable
+    }
+  }
+
+  return (
+    <Button type="button" size="icon-xs" variant="ghost" onClick={copy} aria-label={copied ? 'Copied' : label} title={label}>
+      {copied ? <Check aria-hidden /> : <Copy aria-hidden />}
+    </Button>
+  );
+}
+
 /** A read-only value (key, link) with a copy button. */
 export function CopyField({ value, label = 'Copy', ariaLabel }: { value: string; label?: string; ariaLabel: string }) {
   return (

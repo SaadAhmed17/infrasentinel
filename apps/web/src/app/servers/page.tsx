@@ -3,17 +3,16 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { AlertCircle, Check, Ellipsis, KeyRound, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { AlertCircle, Check, Plus, X } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { ProtectedRoute } from '@/components/protected-route';
 import { AppShell } from '@/components/app-shell';
 import { ConnectPanel } from '@/components/servers/connect-panel';
+import { ServerMenu, useServerActions } from '@/components/servers/server-actions';
 import { Button } from '@/components/ui/button';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { fieldControlClass, fieldHintClass, fieldInlineErrorClass, fieldLabelClass } from '@/components/ui/form-styles';
 import { LiveIndicator } from '@/components/ui/live-indicator';
-import { DropdownMenu, MenuItem, MenuSeparator } from '@/components/ui/menu';
 import { Notice } from '@/components/ui/notice';
 import { Panel } from '@/components/ui/panel';
 import { RelativeTime } from '@/components/ui/relative-time';
@@ -244,39 +243,6 @@ function RenameForm({
   );
 }
 
-function ServerMenu({
-  server,
-  onRename,
-  onReplaceKey,
-  onDelete,
-}: {
-  server: Server;
-  onRename: () => void;
-  onReplaceKey: () => void;
-  onDelete: () => void;
-}) {
-  return (
-    <DropdownMenu
-      trigger={
-        <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${server.name}`} className="relative z-10">
-          <Ellipsis />
-        </Button>
-      }
-    >
-      <MenuItem icon={Pencil} onClick={onRename}>
-        Rename
-      </MenuItem>
-      <MenuItem icon={KeyRound} onClick={onReplaceKey}>
-        Replace agent key
-      </MenuItem>
-      <MenuSeparator />
-      <MenuItem icon={Trash2} onClick={onDelete} destructive>
-        Delete server
-      </MenuItem>
-    </DropdownMenu>
-  );
-}
-
 /** Name (the row's link) with the hostname under it, or the rename form. */
 function ServerName({
   server,
@@ -335,13 +301,16 @@ function ServersContent({
   connect: Connect;
   setConnect: (connect: Connect) => void;
 }) {
-  const toast = useToast();
   const { servers, error, updatedAt, retry, replace, remove, add } = list;
   const [filter, setFilter] = useState<Filter>('all');
   const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState<{ kind: 'delete' | 'key'; server: Server } | null>(null);
-  const [confirmBusy, setConfirmBusy] = useState(false);
-  const [confirmError, setConfirmError] = useState('');
+  const actions = useServerActions({
+    onDeleted: (server) => remove(server.id),
+    onKeyReplaced: (server, apiKey) => {
+      setConnect({ title: `New agent key for ${server.name}`, apiKey });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+  });
 
   const sorted = [...(servers ?? [])].sort(
     (a, b) => (STATUS_ORDER[a.status] ?? 1) - (STATUS_ORDER[b.status] ?? 1) || a.name.localeCompare(b.name),
@@ -349,42 +318,12 @@ function ServersContent({
   const shown = filter === 'all' ? sorted : sorted.filter((s) => s.status === filter);
   const count = (status: Server['status']) => sorted.filter((s) => s.status === status).length;
 
-  function openConfirm(kind: 'delete' | 'key', server: Server) {
-    setConfirmError('');
-    setConfirm({ kind, server });
-  }
-
-  async function runConfirm() {
-    if (!confirm) return;
-    const { kind, server } = confirm;
-    setConfirmBusy(true);
-    setConfirmError('');
-    try {
-      if (kind === 'delete') {
-        await apiClient.delete(`/servers/${server.id}`);
-        remove(server.id);
-        toast.success(`${server.name} deleted`);
-      } else {
-        const result = await apiClient.post<{ apiKey: string }>(`/servers/${server.id}/regenerate-key`, {});
-        setConnect({ title: `New agent key for ${server.name}`, apiKey: result.apiKey });
-        toast.success('Agent key replaced', 'Restart the agent with the new key.');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-      setConfirm(null);
-    } catch (err) {
-      setConfirmError(friendlyError(err));
-    } finally {
-      setConfirmBusy(false);
-    }
-  }
-
+  // renaming happens in the row; the other actions open dialogs
   const menuFor = (server: Server) =>
     canManage && (
       <ServerMenu
         server={server}
-        onRename={() => setRenamingId(server.id)}
-        onReplaceKey={() => openConfirm('key', server)}
-        onDelete={() => openConfirm('delete', server)}
+        onAction={(kind) => (kind === 'rename' ? setRenamingId(server.id) : actions.open(kind, server))}
       />
     );
 
@@ -568,21 +507,7 @@ function ServersContent({
         )}
       </Panel>
 
-      <ConfirmDialog
-        open={!!confirm}
-        onOpenChange={(open) => !open && setConfirm(null)}
-        busy={confirmBusy}
-        error={confirmError}
-        destructive={confirm?.kind === 'delete'}
-        title={confirm?.kind === 'delete' ? `Delete ${confirm.server.name}?` : `Replace the agent key for ${confirm?.server.name}?`}
-        description={
-          confirm?.kind === 'delete'
-            ? 'Its metrics are deleted. Its alerts stay with their incidents.'
-            : 'The current key stops working right away. Restart the agent with the new key.'
-        }
-        confirmLabel={confirm?.kind === 'delete' ? 'Delete server' : 'Replace key'}
-        onConfirm={runConfirm}
-      />
+      {actions.dialogs}
     </div>
   );
 }

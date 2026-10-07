@@ -21,3 +21,8 @@ export function friendlyError(err: unknown, fallback = 'Something went wrong. Tr
   }
   return message.charAt(0).toUpperCase() + message.slice(1);
 }
+
+/** The API answered 404 (the thing doesn't exist, or isn't in this organization). */
+export function isNotFound(err: unknown) {
+  return (err as { status?: number } | null)?.status === 404;
+}

@@ -142,7 +142,8 @@ export function EmptyState({
   art?: PixelArtName;
   icon?: LucideIcon;
   tone?: keyof typeof TONE_STYLE;
-  title: string;
+  /** Leave out when the page title already says it. */
+  title?: string;
   description?: ReactNode;
   action?: ReactNode;
   className?: string;
@@ -154,8 +155,10 @@ export function EmptyState({
           {art ? <PixelArt name={art} className="size-11" /> : Icon && <Icon className="size-7" strokeWidth={1.75} aria-hidden />}
         </div>
       )}
-      <p className="text-[15px] font-semibold text-foreground">{title}</p>
-      {description && <p className="mt-1.5 max-w-sm text-[14px] leading-relaxed text-muted-foreground">{description}</p>}
+      {title && <p className="text-[15px] font-semibold text-foreground">{title}</p>}
+      {description && (
+        <p className={cn('max-w-sm text-[14px] leading-relaxed text-muted-foreground', title && 'mt-1.5')}>{description}</p>
+      )}
       {action && <div className="mt-5 flex flex-wrap justify-center gap-2">{action}</div>}
     </div>
   );

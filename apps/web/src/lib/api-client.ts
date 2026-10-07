@@ -60,7 +60,8 @@ async function apiFetch<T>(path: string, options: RequestInit = {}, isRetry = fa
     // Not every error response is JSON (e.g. a proxy's HTML error page).
     const errorBody: Partial<ApiError> = await res.json().catch(() => ({}));
     const message = errorBody.message ?? `Request failed (${res.status} ${res.statusText})`;
-    throw new Error(Array.isArray(message) ? message.join(', ') : message);
+    // the status travels with the error, so pages can tell "not found" from "failed"
+    throw Object.assign(new Error(Array.isArray(message) ? message.join(', ') : message), { status: res.status });
   }
 
   return res.json();
