@@ -102,7 +102,10 @@ function FarSkyline({ width }: { width: number }) {
   return <g>{blocks}</g>;
 }
 
-function Rack({ index, x, w, h }: RackSpec & { index: number }) {
+// The 404 "outage": every light off except one red light, and the sun half set.
+const OUTAGE_LIGHT = '1-2';
+
+function Rack({ index, x, w, h, outage }: RackSpec & { index: number; outage: boolean }) {
   const top = HORIZON - h;
   const units = Math.floor((h - 2) / 4);
   const next = random(index * 97 + 5);
@@ -114,8 +117,9 @@ function Rack({ index, x, w, h }: RackSpec & { index: number }) {
   for (let u = 0; u < units; u++) {
     const y = top + 2 + u * 4;
     parts.push(<rect key={`line-${u}`} x={x + 1} y={y + 3} width={w - 1} height={1} fill="var(--scene-rack-line)" />);
-    const kind: LedKind = LED_OVERRIDES[`${index}-${u}`] ?? 'ok';
-    const blinking = kind !== 'ok' || next() > 0.85;
+    const kind: LedKind = outage ? 'alert' : (LED_OVERRIDES[`${index}-${u}`] ?? 'ok');
+    const lit = !outage || `${index}-${u}` === OUTAGE_LIGHT;
+    const blinking = outage ? lit : kind !== 'ok' || next() > 0.85;
     parts.push(
       <rect
         key={`led-${u}`}
@@ -123,7 +127,7 @@ function Rack({ index, x, w, h }: RackSpec & { index: number }) {
         y={y + 1}
         width={2}
         height={1}
-        fill={`var(--scene-led-${kind})`}
+        fill={lit ? `var(--scene-led-${kind})` : 'var(--scene-rack-line)'}
         className={blinking ? 'animate-rack-blink' : undefined}
         style={blinking ? { animationDuration: '2.4s', animationDelay: `${(next() * 2.4).toFixed(2)}s` } : undefined}
       />,
@@ -138,9 +142,12 @@ function Rack({ index, x, w, h }: RackSpec & { index: number }) {
 export function RackSkyline({
   className,
   variant = 'standard',
+  outage = false,
 }: {
   className?: string;
   variant?: 'standard' | 'wide';
+  /** Lights out and the sun half set (the 404 page). */
+  outage?: boolean;
 }) {
   const { width, sunX, racks } = SCENES[variant];
   const next = random(3);
@@ -170,10 +177,10 @@ export function RackSkyline({
           style={s.twinkle ? { animationDuration: '3.2s', animationDelay: `${(i % 7) * 0.4}s` } : undefined}
         />
       ))}
-      <Sun cx={sunX} cy={58} r={26} />
+      <Sun cx={sunX} cy={outage ? HORIZON : 58} r={26} />
       <FarSkyline width={width} />
       {racks.map((rack, i) => (
-        <Rack key={i} index={i} {...rack} />
+        <Rack key={i} index={i} outage={outage} {...rack} />
       ))}
       <rect x={0} y={HORIZON} width={width} height={H - HORIZON} fill="var(--scene-ground)" />
       <rect x={0} y={HORIZON} width={width} height={1} fill="var(--scene-horizon)" opacity={0.85} />

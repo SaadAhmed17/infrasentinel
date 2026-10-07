@@ -16,7 +16,6 @@ export function CornerBrackets({ className }: { className?: string }) {
 }
 
 export function Panel({
-  label,
   title,
   meta,
   actions,
@@ -27,8 +26,6 @@ export function Panel({
   children,
   id,
 }: {
-  /** Old small label above the title; pages are moving away from it. */
-  label?: string;
   title?: ReactNode;
   /** Short text next to the title, e.g. "6 members". */
   meta?: ReactNode;
@@ -42,7 +39,7 @@ export function Panel({
   children?: ReactNode;
   id?: string;
 }) {
-  const hasHeader = label || title || actions || meta;
+  const hasHeader = title || actions || meta;
   return (
     <section
       id={id}
@@ -55,9 +52,8 @@ export function Panel({
       {hasHeader && (
         <header className="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 sm:px-5">
           <div className="min-w-0">
-            {label && <p className="text-label">{label}</p>}
             {title && (
-              <h2 className={cn('text-[15px] font-semibold tracking-[-0.005em] text-foreground', label && 'mt-0.5')}>
+              <h2 className="text-[15px] font-semibold tracking-[-0.005em] text-foreground">
                 {title}
                 {meta && <span className="ml-2 text-[13px] font-normal text-muted-foreground">{meta}</span>}
               </h2>
