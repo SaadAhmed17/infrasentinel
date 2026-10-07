@@ -149,6 +149,7 @@ export function AppShell({
   meta,
   back,
   actions,
+  inlineActions,
 }: {
   children: ReactNode;
   title: ReactNode;
@@ -156,6 +157,7 @@ export function AppShell({
   meta?: ReactNode;
   back?: { href: string; label: string };
   actions?: ReactNode;
+  inlineActions?: boolean;
 }) {
   const pathname = usePathname();
   const collapsed = useSyncExternalStore(subscribeToSidebar, isSidebarCollapsed, () => false);
@@ -271,7 +273,7 @@ export function AppShell({
           tabIndex={-1}
           className="mx-auto w-full max-w-[1400px] flex-1 animate-fade-up px-4 pb-28 pt-5 outline-none sm:px-6 sm:pt-7 md:pb-10 lg:px-10"
         >
-          <PageHeader title={title} description={description} meta={meta} back={back} actions={actions} />
+          <PageHeader title={title} description={description} meta={meta} back={back} actions={actions} inlineActions={inlineActions} />
           {children}
         </main>
       </div>

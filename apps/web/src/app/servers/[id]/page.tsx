@@ -651,6 +651,7 @@ function ServerDetailContent() {
           )}
         </span>
       }
+      inlineActions
       actions={canManage && <ServerMenu server={server} onAction={(kind) => actions.open(kind, server)} />}
     >
       <div className="space-y-5 sm:space-y-6">
