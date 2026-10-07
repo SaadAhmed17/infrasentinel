@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { AnomalyService } from '../anomaly/anomaly.service';
+import { RagService } from '../rag/rag.service';
 import { Alert, Prisma } from '@prisma/client';
 
 // Agents push a reading about every 10 s (plus a 1 s CPU sample), so a breach
@@ -28,6 +29,7 @@ export class RuleEngineService {
   constructor(
     private prisma: PrismaService,
     private anomalyService: AnomalyService,
+    private readonly ragService: RagService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -95,6 +97,8 @@ export class RuleEngineService {
             ]),
           },
         });
+        // Re-index so the assistant sees the incident's new alerts.
+        void this.ragService.indexIncident(openIncident.id, organizationId);
 
         this.logger.warn(
           `Incident ${openIncident.id}: added ${groupedAlerts.length} new alert(s)`,
@@ -123,6 +127,8 @@ export class RuleEngineService {
         where: { id: { in: alertIds } },
         data: { incidentId: incident.id },
       });
+      // Indexed only after its alerts are linked, so the index includes them.
+      void this.ragService.indexIncident(incident.id, organizationId);
 
       this.logger.warn(
         `Incident created: ${incident.id} grouping ${groupedAlerts.length} alert(s)`,

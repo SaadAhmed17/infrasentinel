@@ -123,6 +123,7 @@ const PRESETS = [
   { label: 'High CPU', ruleType: 'METRIC_THRESHOLD', metricField: 'CPU_USAGE', operator: 'GREATER_THAN', threshold: '85', durationSeconds: '60', severity: 'HIGH' },
   { label: 'Service Crash', ruleType: 'HEARTBEAT_MISSING', durationSeconds: '30', severity: 'CRITICAL' },
   { label: 'API Flood', ruleType: 'EVENT_FREQUENCY', eventType: 'API_REQUEST', groupByField: 'ipAddress', maxCount: '100', windowSeconds: '60', severity: 'HIGH' },
+  { label: 'Off-Hours Root Access', ruleType: 'UNUSUAL_ACCESS', businessHourStart: '9', businessHourEnd: '18', severity: 'HIGH' },
 ];
 
 // Keeps a value that is no longer in the list (e.g. an older rule) selectable.
@@ -281,6 +282,11 @@ function RulesContent() {
     if (p.groupByField) setGroupByField(p.groupByField);
     if (p.maxCount) setMaxCount(p.maxCount);
     if (p.windowSeconds) setWindowSeconds(p.windowSeconds);
+    if (p.businessHourStart) {
+      setApprovedUsernames('');
+      setBusinessHourStart(p.businessHourStart);
+      setBusinessHourEnd(p.businessHourEnd ?? '18');
+    }
     setSeverity(p.severity);
     setShowForm(true);
   }

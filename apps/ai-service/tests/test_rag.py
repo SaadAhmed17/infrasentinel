@@ -56,13 +56,23 @@ def row(incident_id, content, distance=0.2):
     return (incident_id, content, f"title {incident_id}", "HIGH", "OPEN", distance)
 
 
-def test_RAG_U01_the_retrieval_query_is_filtered_by_the_callers_org(db, fake_llm):
-    cursor = db([row("i1", "cpu spike")])
+def test_RAG_U01_the_retrieval_queries_are_filtered_by_the_callers_org(db, fake_llm):
+    cursor = db([row("i1", "cpu spike")], [row("i2", "disk full")])
 
     rag.query_incidents("org-A", "what happened?")
 
-    (semantic,) = cursor.executed
+    # Hybrid retrieval: the most similar incidents, plus the most recent ones.
+    semantic, recent = cursor.executed
     assert 'WHERE ie."organizationId" = %s' in semantic[0] and semantic[1][1] == "org-A"
+    assert 'WHERE ie."organizationId" = %s' in recent[0] and recent[1] == ("org-A",)
+
+
+def test_RAG_U05_recent_incidents_are_added_once_after_the_similar_ones(db, fake_llm):
+    db([row("i1", "a", 0.1)], [row("i2", "b", 0.5), row("i1", "a", 0.5)])
+
+    result = rag.query_incidents("org-A", "q")
+
+    assert [s["incidentId"] for s in result["sources"]] == ["i1", "i2"]
 
 
 def test_RAG_U02_no_indexed_incidents_gives_an_honest_answer_without_calling_the_llm(db, fake_llm):
@@ -107,6 +117,30 @@ def test_RAG_U06_incident_summary_includes_alert_evidence():
 
     assert "Alert from rule 'cpu>80' on server web-01: {\"value\": 97}" in summary
     assert "Alert from rule 'brute force': " in summary
+
+
+def test_RAG_U09_auto_index_embeds_one_incident_of_the_callers_org(db):
+    cursor = db(
+        [("inc-1", "Disk full", "HIGH", "OPEN", "2026-10-07 09:00")],
+        [("disk>90", "web-01", {"value": 95})],
+    )
+
+    result = rag.index_single_incident("inc-1", "org-A")
+
+    assert result == {"indexed": True, "incidentId": "inc-1"}
+    lookup, _alerts, upsert = cursor.executed
+    assert 'i."organizationId" = %s' in lookup[0] and lookup[1] == ("inc-1", "org-A")
+    assert "ON CONFLICT" in upsert[0] and upsert[1][:2] == ("inc-1", "org-A")
+    assert "Alert from rule 'disk>90' on server web-01" in upsert[1][2]
+
+
+def test_RAG_U10_auto_index_ignores_an_incident_of_another_org(db):
+    cursor = db([])
+
+    result = rag.index_single_incident("inc-of-org-B", "org-A")
+
+    assert result["indexed"] is False
+    assert len(cursor.executed) == 1, "nothing may be embedded or written"
 
 
 @pytest.mark.xfail(strict=True, reason="DEF-27: an LLM outage becomes an unhandled error (500)")

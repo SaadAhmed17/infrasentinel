@@ -87,7 +87,7 @@ export class ServersService {
     organizationId: string,
     dto: IngestLogEventDto,
   ) {
-    return await this.eventsService.record({
+    return this.eventsService.record({
       eventType: dto.eventType,
       source: 'ssh-log-agent',
       severity: dto.outcome === 'FAILURE' ? 'WARNING' : 'INFO',
@@ -109,6 +109,8 @@ export class ServersService {
     return this.prisma.server.findMany({
       where: { organizationId },
       select: SERVER_PUBLIC_FIELDS,
+      // A stable order, so rows don't jump around after an edit.
+      orderBy: { createdAt: 'asc' },
     });
   }
 
@@ -138,6 +140,39 @@ export class ServersService {
     }
 
     return server;
+  }
+
+  async updateServer(organizationId: string, serverId: string, name: string) {
+    const server = await this.prisma.server.findFirst({
+      where: { id: serverId, organizationId },
+    });
+    if (!server) throw new NotFoundException('Server not found');
+
+    return this.prisma.server.update({
+      where: { id: serverId },
+      data: { name },
+      select: SERVER_PUBLIC_FIELDS,
+    });
+  }
+
+  async deleteServer(organizationId: string, serverId: string) {
+    const server = await this.prisma.server.findFirst({
+      where: { id: serverId, organizationId },
+    });
+    if (!server) throw new NotFoundException('Server not found');
+
+    // Its metrics go with it, but its alerts stay (unlinked) so incidents
+    // keep their history, as with deleted rules.
+    await this.prisma.$transaction([
+      this.prisma.metric.deleteMany({ where: { serverId } }),
+      this.prisma.alert.updateMany({
+        where: { serverId },
+        data: { serverId: null },
+      }),
+      this.prisma.server.delete({ where: { id: serverId } }),
+    ]);
+
+    return { deleted: true, serverId };
   }
 
   // Replaces a (possibly leaked) agent key; the old key stops working at once.

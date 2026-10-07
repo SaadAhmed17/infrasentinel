@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Check, Copy, KeyRound, Plus, X } from 'lucide-react';
+import { ArrowRight, Check, Copy, KeyRound, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { ProtectedRoute } from '@/components/protected-route';
 import { AppShell } from '@/components/app-shell';
@@ -51,6 +51,10 @@ function ServersContent({
   const [creating, setCreating] = useState(false);
   const [newApiKey, setNewApiKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   function loadServers() {
     apiClient
@@ -80,6 +84,41 @@ function ServersContent({
       setError(err instanceof Error ? err.message : 'Failed to create server');
     } finally {
       setCreating(false);
+    }
+  }
+
+  function startRename(s: Server) {
+    setDeletingId(null);
+    setRenamingId(s.id);
+    setRenameValue(s.name);
+  }
+
+  async function handleRename(e: React.FormEvent, id: string) {
+    e.preventDefault();
+    setBusyId(id);
+    setError('');
+    try {
+      await apiClient.patch(`/servers/${id}`, { name: renameValue.trim() });
+      setRenamingId(null);
+      loadServers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to rename server');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    setBusyId(id);
+    setError('');
+    try {
+      await apiClient.delete(`/servers/${id}`);
+      setDeletingId(null);
+      loadServers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete server');
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -220,31 +259,93 @@ function ServersContent({
                 </tr>
               </thead>
               <tbody>
-                {servers.map((s) => (
-                  <tr key={s.id} className="group border-b border-border/70 transition-colors last:border-0 hover:bg-accent/40">
-                    <td className="px-5 py-3.5">
-                      <Link href={`/servers/${s.id}`} className="block rounded-sm">
-                        <span className="block font-semibold text-foreground">{s.name}</span>
-                        {s.hostname && <span className="block font-mono text-[12px] text-muted-foreground">{s.hostname}</span>}
-                      </Link>
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <ServerStatusBadge status={s.status} />
-                    </td>
-                    <td className="px-5 py-3.5 font-mono text-[12.5px] tabular-nums text-muted-foreground">
-                      {timeSince(s.lastHeartbeat)}
-                    </td>
-                    <td className="px-5 py-3.5 text-right">
-                      <Link
-                        href={`/servers/${s.id}`}
-                        className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'group-hover:text-foreground')}
-                      >
-                        Details
-                        <ArrowRight />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
+                {servers.map((s) => {
+                  const busy = busyId === s.id;
+                  return (
+                    <tr key={s.id} className="group border-b border-border/70 transition-colors last:border-0 hover:bg-accent/40">
+                      <td className="px-5 py-3.5">
+                        {renamingId === s.id ? (
+                          <form onSubmit={(e) => handleRename(e, s.id)} className="flex items-center gap-1.5">
+                            <label htmlFor={`rename-${s.id}`} className="sr-only">
+                              New name for {s.name}
+                            </label>
+                            <input
+                              id={`rename-${s.id}`}
+                              required
+                              minLength={2}
+                              maxLength={100}
+                              autoFocus
+                              value={renameValue}
+                              onChange={(e) => setRenameValue(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Escape' && setRenamingId(null)}
+                              className={cn(fieldControlClass, 'h-8 max-w-56')}
+                            />
+                            <Button type="submit" size="icon-sm" variant="outline" disabled={busy} aria-label="Save name">
+                              <Check />
+                            </Button>
+                            <Button type="button" size="icon-sm" variant="ghost" onClick={() => setRenamingId(null)} aria-label="Cancel rename">
+                              <X />
+                            </Button>
+                          </form>
+                        ) : (
+                          <Link href={`/servers/${s.id}`} className="block rounded-sm">
+                            <span className="block font-semibold text-foreground">{s.name}</span>
+                            {s.hostname && <span className="block font-mono text-[12px] text-muted-foreground">{s.hostname}</span>}
+                          </Link>
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <ServerStatusBadge status={s.status} />
+                      </td>
+                      <td className="px-5 py-3.5 font-mono text-[12.5px] tabular-nums text-muted-foreground">
+                        {timeSince(s.lastHeartbeat)}
+                      </td>
+                      <td className="px-5 py-3.5 text-right">
+                        {deletingId === s.id ? (
+                          <div className="inline-flex items-center gap-1.5">
+                            <span className="text-[13px] text-muted-foreground">Delete server and its metrics?</span>
+                            <Button size="sm" variant="destructive" disabled={busy} onClick={() => handleDelete(s.id)}>
+                              {busy ? 'Deleting...' : 'Delete'}
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setDeletingId(null)}>
+                              Keep
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="inline-flex items-center gap-1">
+                            {canManage && (
+                              <>
+                                <Button size="icon-sm" variant="ghost" onClick={() => startRename(s)} aria-label={`Rename ${s.name}`} title="Rename">
+                                  <Pencil />
+                                </Button>
+                                <Button
+                                  size="icon-sm"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    setRenamingId(null);
+                                    setDeletingId(s.id);
+                                  }}
+                                  aria-label={`Delete ${s.name}`}
+                                  title="Delete"
+                                  className="hover:text-destructive"
+                                >
+                                  <Trash2 />
+                                </Button>
+                              </>
+                            )}
+                            <Link
+                              href={`/servers/${s.id}`}
+                              className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'group-hover:text-foreground')}
+                            >
+                              Details
+                              <ArrowRight />
+                            </Link>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

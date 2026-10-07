@@ -114,7 +114,11 @@ def pg_url():
         script = REPO_DIR / "apps/api/test/support/pglite-server.mjs"
         if not node or not (REPO_DIR / "apps/api/node_modules/@electric-sql/pglite").exists():
             pytest.skip("no test database: set RAG_TEST_DATABASE_URL or install apps/api dependencies")
-        process = subprocess.Popen([node, str(script)], stdout=subprocess.PIPE, text=True)
+        # PORT=0: a free port, even when the service's .env (loaded into the
+        # environment on import) sets PORT for the service itself.
+        process = subprocess.Popen(
+            [node, str(script)], stdout=subprocess.PIPE, text=True, env={**os.environ, "PORT": "0"}
+        )
         ready = process.stdout.readline()
         port = re.search(r"READY (\d+)", ready).group(1)
         url = f"postgresql://postgres:postgres@127.0.0.1:{port}/postgres?sslmode=disable"
