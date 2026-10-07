@@ -8,10 +8,12 @@ import { apiClient } from '@/lib/api-client';
 // moving between pages doesn't refetch or flash empty values.
 interface ShellState {
   orgName: string | null;
+  /** The organization request failed; the next page visit tries again. */
+  orgFailed: boolean;
   openIncidents: number | null;
 }
 
-const EMPTY: ShellState = { orgName: null, openIncidents: null };
+const EMPTY: ShellState = { orgName: null, orgFailed: false, openIncidents: null };
 let state: ShellState = EMPTY;
 const listeners = new Set<() => void>();
 let orgRequest: Promise<void> | null = null;
@@ -37,15 +39,15 @@ export function loadOrganization() {
   if (state.orgName || orgRequest) return;
   orgRequest = apiClient
     .get<{ name: string }>('/organizations/me')
-    .then((org) => update({ orgName: org.name }))
-    .catch(() => undefined)
+    .then((org) => update({ orgName: org.name, orgFailed: false }))
+    .catch(() => update({ orgFailed: true }))
     .finally(() => {
       orgRequest = null;
     });
 }
 
 export function setOrganizationName(name: string) {
-  update({ orgName: name });
+  update({ orgName: name, orgFailed: false });
 }
 
 /** Refreshes the open-incident count (called on a timer and after status changes). */

@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 // holds who is signed in and the account actions.
 export function ProfileMenu() {
   const { user, logout } = useAuth();
-  const { orgName } = useShellState();
+  const { orgName, orgFailed } = useShellState();
 
   return (
     <DropdownMenu
@@ -26,7 +26,7 @@ export function ProfileMenu() {
             {initialsFromEmail(user?.email)}
           </span>
           <span className="hidden max-w-44 truncate text-[13.5px] font-medium text-foreground sm:block">
-            {orgName ?? <Skeleton className="h-3.5 w-24" />}
+            {orgName ?? (orgFailed ? 'Account' : <Skeleton className="h-3.5 w-24" />)}
           </span>
           <ChevronDown className="hidden size-3.5 text-muted-foreground sm:block" strokeWidth={1.75} aria-hidden />
         </button>
