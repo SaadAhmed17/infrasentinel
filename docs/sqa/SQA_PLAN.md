@@ -45,7 +45,7 @@ never ran them, and CI did not run on `team-dev` at all (DEF-32, now fixed on `t
 | Q3 | Authentication | All token-forgery cases rejected; refresh rotation; brute-force throttling | **Partly met** — forgery rejected; DEF-12, DEF-13 open | **Partly met** — DEF-12 partly fixed, DEF-13 open |
 | Q4 | Detection correctness | Every rule type fires exactly at documented boundaries, once per condition, and again after resolution | **Partly met** — boundaries/de-dup pass; DEF-06, DEF-15, DEF-16 open | **Met** in automated tests — DEF-06, DEF-15, DEF-16 fixed, plus DEF-47..DEF-51 found and fixed; live re-run pending |
 | Q5 | Input robustness | Invalid input → 4xx and nothing stored; no 5xx from client input | **Partly met** — BVA/EP pass; DEF-20, DEF-23 give 500s | **Partly met** — DEF-20 fixed; DEF-23 still gives a 500 |
-| Q6 | Anomaly-detection quality | Window-level F1 ≥ 0.85 and false-positive rate ≤ 5% on the reproducible benchmark | **Met** — F1 0.914, FPR 3.7% (synthetic data) | **Met** — same results; the team's trained models still need DEF-54 resolved |
+| Q6 | Anomaly-detection quality | Window-level F1 ≥ 0.85 and false-positive rate ≤ 5% on the reproducible benchmark | **Met** — F1 0.914, FPR 3.7% (synthetic data) | **Met** — F1 0.890, FPR 1.2% at the 99th-percentile threshold chosen for DEF-54 (95th: F1 0.914, FPR 3.7%) |
 | Q7 | Regression safety | Every PR runs all suites; failing tests block merge | **Ready** — pipeline written; branch protection is a team decision | **Ready** — pipeline on `team-dev`, first run on push; branch protection is a team decision |
 
 Criteria come from the README's own claims where possible (e.g. "one tenant's

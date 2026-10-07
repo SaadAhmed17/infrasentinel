@@ -56,7 +56,7 @@ Result: ✅ all pass · ⚠️ passes except known defects · ❌ requirement no
 | **Anomaly detection** | | | | | |
 | REQ-M1 | "drops nulls, log-transforms skewed features, … sliding-window sequences (20 timesteps)" | ML-PRE-001..004 | `apps/ai-service/tests/test_preprocess.py` | ✅ | — |
 | REQ-M2 | Chronological split; scaler fitted on training data only (no leakage) | ML-PRE-005..007 | same | ✅ | — |
-| REQ-M3 | "threshold from the 95th percentile of validation reconstruction error" | ML-TRN-001, 002 | `test_training_inference.py` | ✅ for the code | DEF-54: the team's trained model files use another threshold |
+| REQ-M3 | anomaly threshold from a percentile of validation reconstruction error (99th since DEF-54) | ML-TRN-001, 002 | `test_training_inference.py` | ✅ | DEF-54 fixed: code, tests and retrained models use the 99th percentile |
 | REQ-M4 | Real-time inference: correct scoring, strict threshold, clear errors | ML-INF-001..007, AI-API-003 | same, `test_api.py` | ✅ | — |
 | REQ-M5 | Detector quality is acceptable (Q6: F1 ≥ 0.85, FPR ≤ 5%) | evaluation harness | `apps/ai-service/evaluation/` → [evidence](evidence/ML_EVALUATION_RESULTS.md) | ✅ F1 0.914, FPR 0.037 | — |
 | REQ-M6 | Training/inference robust to operational conditions | ML-TRN-003, 004, ML-PRE-008..011 | ML tests | ✅ | DEF-28, DEF-37, DEF-43 fixed |

@@ -20,15 +20,15 @@ converted into a normal regression test.
 > Security note: this repository is public. Credential details for DEF-01/DEF-02 were
 > shared privately with the team lead and are intentionally omitted here.
 
-## Summary (`team-dev`, 2026-10-06)
+## Summary (`team-dev`, 2026-10-08)
 
 | Severity | Total | Fixed | Partly fixed | Open | Not applicable |
 |---|---|---|---|---|---|
 | Critical | 2 | 0 | 0 | 2 (DEF-01, DEF-38) | 0 |
 | High | 7 | 6 | 0 | 1 (DEF-02) | 0 |
-| Medium | 27 | 19 | 2 (DEF-12, DEF-29) | 5 | 1 (DEF-18) |
+| Medium | 27 | 20 | 3 (DEF-12, DEF-18, DEF-29) | 4 | 0 |
 | Low | 18 | 10 | 0 | 8 | 0 |
-| **Total** | **54** | **35** | **2** | **16** | **1** |
+| **Total** | **54** | **36** | **3** | **15** | **0** |
 
 "Fixed" = the fix is a commit on `team-dev` and its proof test passes (or, for UI-only
 fixes, code review, because the frontend has no test runner yet). "Live" in the evidence
@@ -55,7 +55,7 @@ column means the defect was also observed on the running system (`main`, system 
 | DEF-15 | Medium | SIEM | Metric-threshold "duration" is not enforced when data covers less than the window: one 5-second breach fires a 60-second rule (false-positive risk; cf. Prometheus `for:` semantics). The rule form labels the field "Sustained for (seconds)" | SIEM-011 | **Fixed** `08e072f` — SIEM-011, REG-001, 002 pass |
 | DEF-16 | Medium | SIEM | Credential stuffing is missed (false negative) if any failed attempt follows the compromising success | SIEM-044 | **Fixed** `3c94f53` — SIEM-044 passes |
 | DEF-17 | Medium | Incidents | Incident fragmentation: a new alert on the same server does not join the open incident; the code comment promising a 5-minute window is not implemented | INC-007; **live ST-12** (one server, two incidents 60 s apart) | **Fixed** `e465f9e` — INC-007, REG-030..036 pass |
-| DEF-18 | Medium | RAG | A new incident is sent for RAG indexing *before* its alerts are linked (race), and is never re-indexed when its status changes → incomplete/stale assistant context | INC-006 | Not applicable — `team-dev` has no automatic indexing (only `POST /rag/reindex`) |
+| DEF-18 | Medium | RAG | A new incident is sent for RAG indexing *before* its alerts are linked (race), and is never re-indexed when its status changes → incomplete/stale assistant context | INC-006 | **Partly fixed** `0710358`: automatic indexing (merged from `develop`) now runs after the alerts are linked, and again when alerts join an open incident. Re-indexing on a status change is still missing |
 | DEF-19 | Medium | Ingestion | Agents may submit any `eventType` (e.g. `AUTH_LOGIN_SUCCESS`), so a compromised agent can inject platform auth events | EVENT-003 | **Fixed** `55a66cb` — EVENT-003 passes |
 | DEF-20 | Low | Validation | Primitive body fields read with `@Body('x')` bypass validation: unknown role or incident status → HTTP 500 instead of 400 | RBAC-016, INC-011 | **Fixed** `46a6a49` (role), `a37d689` (status) — RBAC-016, INC-011 pass |
 | DEF-21 | Low | Ingestion | Invalid agent API key returns 404 instead of 401 | AGENT-005 | **Fixed** `2c6c4a8` — AGENT-005 passes |
@@ -81,7 +81,7 @@ column means the defect was also observed on the running system (`main`, system 
 | DEF-41 | Low | Frontend | Rule "Quick preset" buttons fill a hidden form and never open it — clicking one appears to do nothing | **live ST-07**, code review | **Fixed** `a0a7424` (rules page redesign) — code review |
 | DEF-42 | Low | Frontend | Add/Edit/Delete/New Rule/Mark resolved are shown to every role (only member management is role-aware); for a VIEWER the incident buttons fail silently (403, no error handling). Server-side RBAC is correct | **live ST-10**, code review | **Fixed** `47083ac` — code review |
 | DEF-43 | High | ML | The LSTM can never be trained for a Windows-monitored server: the agent omits `loadAverage` on Windows and pre-processing drops every row with a missing feature (0 rows → crash). The training script has no per-server error handling, so one such server aborts training for **all** servers of all organizations | ML-PRE-009; **live ST-12** (39 rows, 0 with loadAverage) | **Fixed** `60d0fcd` — ML-PRE-009..011, ML-TRN-004 pass |
-| DEF-44 | Low | ML | With short histories the 95th-percentile threshold is estimated from very few validation windows (13 in the system test), making it unstable | live ST-12 | Open |
+| DEF-44 | Low | ML | With short histories the percentile threshold is estimated from very few validation windows (13 in the system test), making it unstable | live ST-12 | Open |
 | DEF-45 | Low | Configuration | The API has no explicit configuration loading or validation; JWT secrets arrive only because Prisma auto-loads `.env` and happens to be imported before the auth module (whose strategy throws at import if the secret is missing) | live ST-01, code review | Open |
 | DEF-46 | Low | ML | `train.py` kept a *reference* to the live weights as the "best" snapshot, so the saved model (and its threshold) came from the last epoch — with early stopping always 5 epochs past the best one | ML-TRN-005 | **Fixed** `ca2d306` — ML-TRN-005 passes |
 | DEF-47 | Medium | SIEM | Once resolving an incident resolves its alerts (DEF-06 fix), event rules raised the **same** brute-force / stuffing alert again on the next tick from events that had already been reported | REG-010, REG-011 | **Fixed** `22c2a4c` — REG-010, 011 pass |
@@ -91,13 +91,12 @@ column means the defect was also observed on the running system (`main`, system 
 | DEF-51 | Medium | Incidents | Event alerts without a server were lumped into one incident, even when they were about unrelated IPs or accounts | REG-030, REG-031 | **Fixed** `e465f9e` — REG-030, 031 pass |
 | DEF-52 | Medium | Auth | Forgot password answered "check your e-mail" even when no mail server was configured, so no e-mail ever arrived and nothing said why (reported by a team member) | forgot-password.spec | **Fixed** `d66c3e4` — the user is told (503) and the SMTP connection is checked at startup |
 | DEF-53 | Medium | SIEM | Deleting a rule also deleted all of its alerts, so its incidents lost their evidence and the security history of what was detected disappeared with the rule | REG-060 | **Fixed** `aaa41f6` — rules are soft-deleted; REG-060 passes |
-| DEF-54 | Medium | ML | The thresholds saved with the team's trained models (shared outside Git) are about 1.5 × the 99th percentile of validation error, while `train.py` uses the 95th percentile. Measured: the stored thresholds give almost no false alarms but miss CPU and memory spikes; the code's rule catches most spikes but gives about 144 false alarms per server per day | analysis of the shared model files | Open — the team must choose one threshold rule and retrain/export consistently |
+| DEF-54 | Medium | ML | The thresholds saved with the team's trained models (shared outside Git) are about 1.5 × the 99th percentile of validation error, while `train.py` uses the 95th percentile. Measured: the stored thresholds give almost no false alarms but miss CPU and memory spikes; the code's rule catches most spikes but gives about 144 false alarms per server per day | analysis of the shared model files | **Fixed** (2026-10-08): `train.py` uses the 99th percentile, chosen by measurement (benchmark F1 0.890, FPR 1.2%, meets Q6; about 29 instead of 144 flagged normal windows per server per day on the team's data); ML-TRN-002 passes; InfraServer01–03 retrained with it. See ML_VALIDATION.md |
 
 ## Suggested fix order (what is left)
 
 1. DEF-01, DEF-02 (rotate secrets — minutes; placeholders in `.env.example`).
 2. DEF-38, DEF-39, DEF-40, DEF-31 — dependency changes, prepared in cycle 1, waiting for approval.
-3. DEF-54 — choose the anomaly threshold rule, then retrain the models with the same code.
-4. DEF-13, DEF-12 (rest) — login throttling and refresh-token rotation (needs a small design decision: limits, token store).
-5. DEF-26, DEF-27, DEF-25 — AI-service timeouts and RAG/LLM hardening (on hold).
-6. DEF-23, DEF-29 (rest), DEF-35, DEF-33, DEF-44, DEF-45.
+3. DEF-13, DEF-12 (rest) — login throttling and refresh-token rotation (needs a small design decision: limits, token store).
+4. DEF-26, DEF-27, DEF-25 — AI-service timeouts and RAG/LLM hardening (on hold).
+5. DEF-23, DEF-29 (rest), DEF-35, DEF-33, DEF-44, DEF-45.

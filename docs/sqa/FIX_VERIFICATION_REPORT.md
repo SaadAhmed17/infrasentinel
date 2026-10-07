@@ -95,5 +95,4 @@ Full numbers: [TEST_EXECUTION_REPORT.md](TEST_EXECUTION_REPORT.md).
 | DEF-38 Critical, DEF-39, DEF-40, DEF-31 | dependency changes — not approved for `team-dev` yet |
 | DEF-12 (rest), DEF-13 | refresh-token rotation and login throttling need a small design decision |
 | DEF-25, DEF-26, DEF-27 | AI-service timeouts and RAG/LLM hardening — on hold |
-| DEF-54 | the team must choose the anomaly threshold rule before retraining |
 | DEF-23, DEF-29 (rest), DEF-33, DEF-35, DEF-44, DEF-45 | smaller items, next batch |

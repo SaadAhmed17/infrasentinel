@@ -7,20 +7,20 @@
     "test_windows": 1745,
     "anomalous_windows": 928,
     "episodes": 16,
-    "production_threshold": 0.0222141295671463,
+    "production_threshold": 0.02356167882680893,
     "best_validation_loss": 0.016916004423465993,
-    "runtime_s": 42.1
+    "runtime_s": 208.1
   },
   "headline_at_production_threshold": {
-    "tp": 806,
-    "fp": 30,
-    "tn": 787,
-    "fn": 122,
-    "precision": 0.9641148325358851,
-    "recall": 0.8685344827586207,
-    "f1": 0.9138321995464852,
-    "false_positive_rate": 0.03671970624235006,
-    "false_alarms_per_server_per_hour": 4.406364749082007
+    "tp": 752,
+    "fp": 10,
+    "tn": 807,
+    "fn": 176,
+    "precision": 0.9868766404199475,
+    "recall": 0.8103448275862069,
+    "f1": 0.8899408284023669,
+    "false_positive_rate": 0.012239902080783354,
+    "false_alarms_per_server_per_hour": 1.4687882496940026
   },
   "roc_auc": 0.9581462615540455,
   "per_scenario": {
@@ -36,14 +36,14 @@
       "detected": "2/2",
       "detection_rate": 1.0,
       "median_latency_s": 0.0,
-      "window_recall": 0.9936708860759493
+      "window_recall": 0.9873417721518988
     },
     "memory_leak": {
       "scenario": "memory leak: +0 to +35 points over 15 min",
       "detected": "2/2",
       "detection_rate": 1.0,
-      "median_latency_s": 170.0,
-      "window_recall": 0.8440366972477065
+      "median_latency_s": 185.0,
+      "window_recall": 0.8302752293577982
     },
     "network_flood": {
       "scenario": "inbound flood (DDoS): network in x40 for 3 min",
@@ -77,8 +77,8 @@
       "scenario": "subtle drift: CPU +6, memory +4 points for 15 min (hard case)",
       "detected": "2/2",
       "detection_rate": 1.0,
-      "median_latency_s": 120.0,
-      "window_recall": 0.6009174311926605
+      "median_latency_s": 150.0,
+      "window_recall": 0.37155963302752293
     }
   },
   "static_cpu_rule_baseline": {

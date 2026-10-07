@@ -59,7 +59,7 @@ def test_ML_TRN_001_training_saves_model_scaler_and_config(trained_dir):
     assert config["anomaly_threshold"] > 0
 
 
-def test_ML_TRN_002_threshold_is_the_95th_percentile_of_validation_error(trained_dir, monkeypatch):
+def test_ML_TRN_002_threshold_is_the_99th_percentile_of_validation_error(trained_dir, monkeypatch):
     monkeypatch.setattr(inference, "ARTIFACTS_DIR", str(trained_dir))
     monkeypatch.setattr(inference, "_model_cache", {})
     artifacts = inference.load_server_artifacts(SERVER)
@@ -68,7 +68,7 @@ def test_ML_TRN_002_threshold_is_the_95th_percentile_of_validation_error(trained
     with torch.no_grad():
         errors = torch.mean((artifacts["model"](val) - val) ** 2, dim=(1, 2)).numpy()
 
-    assert artifacts["config"]["anomaly_threshold"] == pytest.approx(np.percentile(errors, 95), rel=1e-5)
+    assert artifacts["config"]["anomaly_threshold"] == pytest.approx(np.percentile(errors, 99), rel=1e-5)
 
 
 def test_ML_TRN_003_too_little_history_fails_with_a_clear_message(tmp_path, monkeypatch):

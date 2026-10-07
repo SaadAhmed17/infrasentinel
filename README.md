@@ -51,7 +51,7 @@ Active development — Final Year Project (FYP), Air University Islamabad. Core 
 
 1. `data_pipeline.py` — pulls raw metrics per server from Neon
 2. `preprocess.py` — drops nulls, log-transforms skewed features (network/disk I/O), normalizes via per-server MinMaxScaler, builds sliding-window sequences (20 timesteps)
-3. `train.py` — trains with early stopping, saves best-validation-loss checkpoint, derives an anomaly threshold from the 95th percentile of validation reconstruction error
+3. `train.py` — trains with early stopping, saves best-validation-loss checkpoint, derives an anomaly threshold from the 99th percentile of validation reconstruction error
 4. `inference.py` — real-time scoring endpoint, exposed via FastAPI
 5. NestJS (`AnomalyModule`) proxies scores and, on a 30-second schedule, auto-creates `Alert`/`Incident` records when anomalies are detected — unified with SIEM rule-based alerts in the same pipeline
 

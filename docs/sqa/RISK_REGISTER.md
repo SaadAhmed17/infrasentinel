@@ -44,7 +44,7 @@ all detection boundaries), and the defects found are specific and fixable.
 | R8 | DEF-12 partly (a password reset stops older sessions from refreshing) | DEF-12 (rest), DEF-13 |
 | R9 | DEF-24 | — |
 | R10 | DEF-10, DEF-15, DEF-34, DEF-47 | — |
-| R11 | DEF-28, DEF-37, DEF-43, DEF-46 | DEF-44, DEF-54 |
+| R11 | DEF-28, DEF-37, DEF-43, DEF-46, DEF-54 | DEF-44 |
 | R12 | — | DEF-26, DEF-27 |
 | R13 | — | DEF-25 |
 | R14 | DEF-29 partly (refused sudo reported as FAILURE) | DEF-29 (rest) |

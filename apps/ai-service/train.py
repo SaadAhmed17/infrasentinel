@@ -18,6 +18,11 @@ EPOCHS = 50
 BATCH_SIZE = 32
 LEARNING_RATE = 0.001
 PATIENCE = 5  # stop early if validation loss doesn't improve for this many epochs in a row
+# A window whose reconstruction error is above this percentile of the validation
+# (normal) error is an anomaly. 99 keeps the benchmark F1 above 0.85 with a ~1%
+# false-positive rate; 95 flagged ~144 normal windows per server per day on the
+# team's data (DEF-54, docs/sqa/ML_VALIDATION.md).
+THRESHOLD_PERCENTILE = 99
 
 
 def load_server_sequences(server_id: str):
@@ -103,9 +108,10 @@ def train_one_server(server_id: str):
         per_sequence_error = torch.mean(
             (val_reconstructed - val_tensor) ** 2, dim=(1, 2)).numpy()
 
-    threshold = float(np.percentile(per_sequence_error, 95))
+    threshold = float(np.percentile(per_sequence_error, THRESHOLD_PERCENTILE))
     print(
-        f"Anomaly threshold (95th percentile of validation reconstruction error): {threshold:.6f}")
+        f"Anomaly threshold ({THRESHOLD_PERCENTILE}th percentile of validation reconstruction error): "
+        f"{threshold:.6f}")
 
     server_dir = os.path.join(ARTIFACTS_DIR, server_id)
     torch.save(model.state_dict(), os.path.join(server_dir, "model.pt"))

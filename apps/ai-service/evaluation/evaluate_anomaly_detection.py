@@ -187,7 +187,8 @@ def to_markdown(r):
         f"- Training: {s['training_rows']} healthy samples (~{s['training_rows'] * 10 / 3600:.1f} h at 10 s)",
         (f"- Test stream: {s['test_stream_rows']} samples, {s['test_windows']} windows "
         f"({s['anomalous_windows']} anomalous), {s['episodes']} injected episodes"),
-        f"- Production threshold (95th pct of validation error): {s['production_threshold']:.6f}",
+        (f"- Production threshold ({train.THRESHOLD_PERCENTILE}th pct of validation error): "
+         f"{s['production_threshold']:.6f}"),
         f"- Runtime: {s['runtime_s']} s",
         "",
         "## Headline (production threshold, window level)",
