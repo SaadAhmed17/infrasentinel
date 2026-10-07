@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { Toast } from '@base-ui/react/toast';
 import { AlertCircle, CircleCheck, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -48,10 +49,15 @@ function ToastList() {
   });
 }
 
+// Stable between renders (the manager's add() is), so pages can call it from
+// refresh effects without re-running them.
 export function useToast() {
-  const manager = Toast.useToastManager();
-  return {
-    success: (title: string, description?: string) => manager.add({ title, description, type: 'success' }),
-    error: (title: string, description?: string) => manager.add({ title, description, type: 'error', priority: 'high' }),
-  };
+  const { add } = Toast.useToastManager();
+  return useMemo(
+    () => ({
+      success: (title: string, description?: string) => add({ title, description, type: 'success' }),
+      error: (title: string, description?: string) => add({ title, description, type: 'error', priority: 'high' }),
+    }),
+    [add],
+  );
 }

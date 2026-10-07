@@ -1,20 +1,30 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Check, Copy, KeyRound, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+import { AlertCircle, Check, Ellipsis, KeyRound, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { ProtectedRoute } from '@/components/protected-route';
 import { AppShell } from '@/components/app-shell';
-import { apiClient } from '@/lib/api-client';
-import { canManageServers } from '@/lib/permissions';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { ConnectPanel } from '@/components/servers/connect-panel';
+import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EmptyState } from '@/components/ui/empty-state';
-import { fieldControlClass, fieldLabelClass } from '@/components/ui/form-styles';
+import { fieldControlClass, fieldHintClass, fieldInlineErrorClass, fieldLabelClass } from '@/components/ui/form-styles';
+import { LiveIndicator } from '@/components/ui/live-indicator';
+import { DropdownMenu, MenuItem, MenuSeparator } from '@/components/ui/menu';
 import { Notice } from '@/components/ui/notice';
 import { Panel } from '@/components/ui/panel';
+import { RelativeTime } from '@/components/ui/relative-time';
+import { SkeletonRows } from '@/components/ui/skeleton';
 import { ServerStatusBadge } from '@/components/ui/status';
-import { TONE_COLOR } from '@/components/ui/tone';
+import { FilterTabs } from '@/components/ui/tabs';
+import { useToast } from '@/components/ui/toast';
+import { apiClient } from '@/lib/api-client';
+import { friendlyError } from '@/lib/errors';
+import { formatDate, formatTime } from '@/lib/format';
+import { canManageServers } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
 
 interface Server {
@@ -26,352 +36,609 @@ interface Server {
   createdAt: string;
 }
 
-function timeSince(dateStr: string | null) {
-  if (!dateStr) return 'Never';
-  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-  if (seconds < 60) return `${seconds}s ago`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  return `${Math.floor(seconds / 3600)}h ago`;
-}
+type Filter = 'all' | Server['status'];
 
-function ServersContent({
-  showForm,
-  onOpenForm,
-  onCloseForm,
-}: {
-  showForm: boolean;
-  onOpenForm: () => void;
-  onCloseForm: () => void;
-}) {
-  const { user } = useAuth();
-  const [servers, setServers] = useState<Server[]>([]);
-  const [loaded, setLoaded] = useState(false);
+// Problems first, then by name.
+const STATUS_ORDER: Record<string, number> = { OFFLINE: 0, UNKNOWN: 1, ONLINE: 2 };
+const FILTER_EMPTY: Record<Filter, string> = {
+  all: 'No servers.',
+  ONLINE: 'No servers are online.',
+  OFFLINE: 'No offline servers.',
+  UNKNOWN: 'No servers are waiting for a first report.',
+};
+const REFRESH_MS = 10_000;
+
+/** The list, refreshed every 10 s. A failed refresh keeps the last list. */
+function useServerList() {
+  const toast = useToast();
+  const [servers, setServers] = useState<Server[] | null>(null);
   const [error, setError] = useState('');
-  const [newServerName, setNewServerName] = useState('');
-  const [creating, setCreating] = useState(false);
-  const [newApiKey, setNewApiKey] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState('');
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
-
-  function loadServers() {
-    apiClient
-      .get<Server[]>('/servers')
-      .then(setServers)
-      .catch((err) => setError(err.message))
-      .finally(() => setLoaded(true));
-  }
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const lastStatus = useRef(new Map<string, string>());
 
   useEffect(() => {
-    loadServers();
-    const interval = setInterval(loadServers, 10000);
-    return () => clearInterval(interval);
-  }, []);
+    let cancelled = false;
+    function load() {
+      apiClient
+        .get<Server[]>('/servers')
+        .then((list) => {
+          if (cancelled) return;
+          // a waiting server whose first report just arrived
+          for (const server of list) {
+            if (lastStatus.current.get(server.id) === 'UNKNOWN' && server.status === 'ONLINE') {
+              toast.success(`${server.name} is connected`, 'Its first report just arrived.');
+            }
+          }
+          lastStatus.current = new Map(list.map((s) => [s.id, s.status]));
+          setServers(list);
+          setError('');
+          setUpdatedAt(Date.now());
+        })
+        .catch((err) => {
+          if (!cancelled) setError(friendlyError(err));
+        });
+    }
+    load();
+    const timer = window.setInterval(load, REFRESH_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [attempt, toast]);
 
-  async function handleCreate(e: React.FormEvent) {
+  function replace(server: Server) {
+    setServers((list) => list?.map((s) => (s.id === server.id ? { ...s, ...server } : s)) ?? null);
+  }
+  function remove(id: string) {
+    setServers((list) => list?.filter((s) => s.id !== id) ?? null);
+  }
+  function add(server: Server) {
+    lastStatus.current.set(server.id, server.status);
+    setServers((list) => [...(list ?? []), server]);
+  }
+
+  return { servers, error, updatedAt, retry: () => setAttempt((n) => n + 1), replace, remove, add };
+}
+
+// ---------------------------------------------------------------------------
+
+function AddServerForm({ onAdded, onCancel }: { onAdded: (server: Server, apiKey: string) => void; onCancel: () => void }) {
+  const [name, setName] = useState('');
+  const [hostname, setHostname] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setCreating(true);
+    const trimmed = name.trim();
+    if (trimmed.length < 2) {
+      setError('Use at least 2 characters.');
+      return;
+    }
+    setSaving(true);
     setError('');
     try {
-      const result = await apiClient.post<{ apiKey: string }>('/servers', { name: newServerName });
-      setNewApiKey(result.apiKey);
-      setNewServerName('');
-      onCloseForm();
-      loadServers();
+      const created = await apiClient.post<Server & { apiKey: string }>('/servers', {
+        name: trimmed,
+        ...(hostname.trim() ? { hostname: hostname.trim() } : {}),
+      });
+      const { apiKey, ...server } = created;
+      onAdded(server, apiKey);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create server');
+      setError(friendlyError(err, "Couldn't add the server. Try again."));
     } finally {
-      setCreating(false);
+      setSaving(false);
     }
   }
-
-  function startRename(s: Server) {
-    setDeletingId(null);
-    setRenamingId(s.id);
-    setRenameValue(s.name);
-  }
-
-  async function handleRename(e: React.FormEvent, id: string) {
-    e.preventDefault();
-    setBusyId(id);
-    setError('');
-    try {
-      await apiClient.patch(`/servers/${id}`, { name: renameValue.trim() });
-      setRenamingId(null);
-      loadServers();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to rename server');
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function handleDelete(id: string) {
-    setBusyId(id);
-    setError('');
-    try {
-      await apiClient.delete(`/servers/${id}`);
-      setDeletingId(null);
-      loadServers();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete server');
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  function copyApiKey() {
-    if (!newApiKey) return;
-    navigator.clipboard.writeText(newApiKey);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  }
-
-  const counts = {
-    online: servers.filter((s) => s.status === 'ONLINE').length,
-    offline: servers.filter((s) => s.status === 'OFFLINE').length,
-    unknown: servers.filter((s) => s.status === 'UNKNOWN').length,
-  };
-  const canManage = canManageServers(user?.role);
 
   return (
-    <div className="space-y-6">
-      {error && <Notice tone="error">{error}</Notice>}
-
-      {newApiKey && (
-        <section className="rounded-xl border border-sev-medium/35 bg-sev-medium/8 p-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-sev-medium/15 text-sev-medium">
-                <KeyRound className="size-[18px]" strokeWidth={1.9} />
-              </span>
-              <div>
-                <p className="text-[15px] font-semibold text-foreground">Server registered. Copy its agent key now.</p>
-                <p className="mt-1 text-[13.5px] text-muted-foreground">
-                  The key is shown only once. Start the agent on the server with <code className="font-mono text-foreground">API_KEY</code> set to it.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Button size="sm" variant="outline" onClick={copyApiKey}>
-                {copied ? <Check /> : <Copy />}
-                {copied ? 'Copied' : 'Copy key'}
-              </Button>
-              <Button size="icon-sm" variant="ghost" onClick={() => setNewApiKey(null)} aria-label="Dismiss">
-                <X />
-              </Button>
-            </div>
+    <Panel title="Add a server" className="animate-fade-up">
+      <form onSubmit={submit} noValidate>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
+          <div>
+            <label htmlFor="server-name" className={fieldLabelClass}>
+              Name
+            </label>
+            <input
+              id="server-name"
+              required
+              autoFocus
+              autoComplete="off"
+              maxLength={100}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="prod-db-01"
+              aria-invalid={!!error || undefined}
+              aria-describedby={error ? 'server-name-error' : undefined}
+              className={fieldControlClass}
+            />
           </div>
-          <code className="mt-4 block break-all rounded-lg border border-border bg-surface-2 px-3 py-2.5 font-mono text-[13px] text-foreground">
-            {newApiKey}
-          </code>
-        </section>
-      )}
-
-      {showForm && canManage && (
-        <Panel label="New server" title="Register a server">
-          <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-3">
-            <div className="min-w-64 flex-1">
-              <label htmlFor="server-name" className={fieldLabelClass}>
-                Server name
-              </label>
-              <input
-                id="server-name"
-                type="text"
-                required
-                autoFocus
-                value={newServerName}
-                onChange={(e) => setNewServerName(e.target.value)}
-                placeholder="e.g. prod-db-01"
-                className={fieldControlClass}
-              />
-            </div>
-            <Button type="submit" disabled={creating} className="h-10">
-              {creating ? 'Registering...' : 'Register server'}
+          <div>
+            <label htmlFor="server-hostname" className={fieldLabelClass}>
+              Hostname <span className="font-normal">(optional)</span>
+            </label>
+            <input
+              id="server-hostname"
+              autoComplete="off"
+              value={hostname}
+              onChange={(e) => setHostname(e.target.value)}
+              placeholder="db01.example.internal"
+              className={cn(fieldControlClass, 'font-mono text-[13.5px]')}
+            />
+          </div>
+          <div className="flex gap-2 sm:col-span-2 lg:col-span-1">
+            <Button type="submit" disabled={saving} className="flex-1 lg:flex-none">
+              {saving ? 'Adding…' : 'Add server'}
             </Button>
-            <Button type="button" variant="ghost" onClick={onCloseForm} className="h-10">
+            <Button type="button" variant="ghost" onClick={onCancel} className="flex-1 lg:flex-none">
               Cancel
             </Button>
-          </form>
-        </Panel>
+          </div>
+        </div>
+        {error ? (
+          <p id="server-name-error" className={fieldInlineErrorClass}>
+            {error}
+          </p>
+        ) : (
+          <p className={fieldHintClass}>You get a key for the server&apos;s agent as soon as it is added.</p>
+        )}
+      </form>
+    </Panel>
+  );
+}
+
+function RenameForm({
+  server,
+  onSaved,
+  onCancel,
+}: {
+  server: Server;
+  onSaved: (server: Server) => void;
+  onCancel: () => void;
+}) {
+  const toast = useToast();
+  const [value, setValue] = useState(server.name);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const name = value.trim();
+    if (name === server.name) return onCancel();
+    if (name.length < 2) return setError('Use at least 2 characters.');
+    setSaving(true);
+    setError('');
+    try {
+      const updated = await apiClient.patch<Server>(`/servers/${server.id}`, { name });
+      onSaved(updated);
+      toast.success(`Renamed to ${updated.name}`);
+    } catch (err) {
+      setError(friendlyError(err, "Couldn't rename the server. Try again."));
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} noValidate className="relative z-10 min-w-0">
+      <div className="flex items-center gap-1.5">
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => e.key === 'Escape' && onCancel()}
+          aria-label={`New name for ${server.name}`}
+          aria-invalid={!!error || undefined}
+          autoFocus
+          maxLength={100}
+          className={cn(fieldControlClass, 'h-8 min-w-0 max-w-64 text-[14px] pointer-coarse:h-10')}
+        />
+        <Button type="submit" size="icon-sm" variant="outline" disabled={saving} aria-label="Save name">
+          <Check />
+        </Button>
+        <Button type="button" size="icon-sm" variant="ghost" onClick={onCancel} aria-label="Cancel renaming">
+          <X />
+        </Button>
+      </div>
+      {error && <p className={fieldInlineErrorClass}>{error}</p>}
+    </form>
+  );
+}
+
+function ServerMenu({
+  server,
+  onRename,
+  onReplaceKey,
+  onDelete,
+}: {
+  server: Server;
+  onRename: () => void;
+  onReplaceKey: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <DropdownMenu
+      trigger={
+        <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${server.name}`} className="relative z-10">
+          <Ellipsis />
+        </Button>
+      }
+    >
+      <MenuItem icon={Pencil} onClick={onRename}>
+        Rename
+      </MenuItem>
+      <MenuItem icon={KeyRound} onClick={onReplaceKey}>
+        Replace agent key
+      </MenuItem>
+      <MenuSeparator />
+      <MenuItem icon={Trash2} onClick={onDelete} destructive>
+        Delete server
+      </MenuItem>
+    </DropdownMenu>
+  );
+}
+
+/** Name (the row's link) with the hostname under it, or the rename form. */
+function ServerName({
+  server,
+  renaming,
+  onSaved,
+  onCancel,
+}: {
+  server: Server;
+  renaming: boolean;
+  onSaved: (server: Server) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="min-w-0">
+      {renaming ? (
+        <RenameForm server={server} onSaved={onSaved} onCancel={onCancel} />
+      ) : (
+        // the link stretches over the whole row, so the row opens the server
+        <Link
+          href={`/servers/${server.id}`}
+          className="block truncate text-[14px] font-semibold text-foreground after:absolute after:inset-0 after:content-['']"
+        >
+          {server.name}
+        </Link>
+      )}
+      {server.hostname && <p className="mt-0.5 truncate font-mono text-[12.5px] text-muted-foreground">{server.hostname}</p>}
+    </div>
+  );
+}
+
+function LastReport({ server, never = 'Never', className }: { server: Server; never?: string; className?: string }) {
+  return server.lastHeartbeat ? (
+    <RelativeTime value={server.lastHeartbeat} className={cn('relative z-10', className)} />
+  ) : (
+    <span className={className}>{never}</span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+type ServerList = ReturnType<typeof useServerList>;
+type Connect = { title: string; apiKey: string } | null;
+
+function ServersContent({
+  list,
+  canManage,
+  adding,
+  setAdding,
+  connect,
+  setConnect,
+}: {
+  list: ServerList;
+  canManage: boolean;
+  adding: boolean;
+  setAdding: (adding: boolean) => void;
+  connect: Connect;
+  setConnect: (connect: Connect) => void;
+}) {
+  const toast = useToast();
+  const { servers, error, updatedAt, retry, replace, remove, add } = list;
+  const [filter, setFilter] = useState<Filter>('all');
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<{ kind: 'delete' | 'key'; server: Server } | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  const [confirmError, setConfirmError] = useState('');
+
+  const sorted = [...(servers ?? [])].sort(
+    (a, b) => (STATUS_ORDER[a.status] ?? 1) - (STATUS_ORDER[b.status] ?? 1) || a.name.localeCompare(b.name),
+  );
+  const shown = filter === 'all' ? sorted : sorted.filter((s) => s.status === filter);
+  const count = (status: Server['status']) => sorted.filter((s) => s.status === status).length;
+
+  function openConfirm(kind: 'delete' | 'key', server: Server) {
+    setConfirmError('');
+    setConfirm({ kind, server });
+  }
+
+  async function runConfirm() {
+    if (!confirm) return;
+    const { kind, server } = confirm;
+    setConfirmBusy(true);
+    setConfirmError('');
+    try {
+      if (kind === 'delete') {
+        await apiClient.delete(`/servers/${server.id}`);
+        remove(server.id);
+        toast.success(`${server.name} deleted`);
+      } else {
+        const result = await apiClient.post<{ apiKey: string }>(`/servers/${server.id}/regenerate-key`, {});
+        setConnect({ title: `New agent key for ${server.name}`, apiKey: result.apiKey });
+        toast.success('Agent key replaced', 'Restart the agent with the new key.');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      setConfirm(null);
+    } catch (err) {
+      setConfirmError(friendlyError(err));
+    } finally {
+      setConfirmBusy(false);
+    }
+  }
+
+  const menuFor = (server: Server) =>
+    canManage && (
+      <ServerMenu
+        server={server}
+        onRename={() => setRenamingId(server.id)}
+        onReplaceKey={() => openConfirm('key', server)}
+        onDelete={() => openConfirm('delete', server)}
+      />
+    );
+
+  return (
+    <div className="space-y-5 sm:space-y-6">
+      {error && servers && (
+        <Notice
+          tone="error"
+          action={
+            <Button size="xs" variant="outline" onClick={retry}>
+              Try again
+            </Button>
+          }
+        >
+          {error} {updatedAt ? `Showing the list from ${formatTime(updatedAt)}.` : ''}
+        </Notice>
       )}
 
-      <Panel
-        label="Fleet"
-        title={
-          !loaded
-            ? 'Loading servers...'
-            : servers.length === 0
-              ? 'No servers registered yet'
-              : `${counts.online} of ${servers.length} servers online`
-        }
-        flush
-        actions={
-          servers.length > 0 && (
-            <div className="hidden items-center gap-4 font-mono text-[12px] text-muted-foreground sm:flex">
-              {[
-                { label: 'online', count: counts.online, color: TONE_COLOR.online },
-                { label: 'offline', count: counts.offline, color: TONE_COLOR.offline },
-                { label: 'not yet', count: counts.unknown, color: TONE_COLOR.unknown },
-              ].map((c) => (
-                <span key={c.label} className="inline-flex items-center gap-1.5">
-                  <span className="size-1.5 rounded-full" style={{ background: c.color }} aria-hidden />
-                  {c.count} {c.label}
-                </span>
-              ))}
-            </div>
+      {connect && <ConnectPanel title={connect.title} apiKey={connect.apiKey} onDone={() => setConnect(null)} />}
+
+      {adding && canManage && !connect && (
+        <AddServerForm
+          onCancel={() => setAdding(false)}
+          onAdded={(server, apiKey) => {
+            add(server);
+            setAdding(false);
+            setFilter('all');
+            setConnect({ title: `Connect ${server.name}`, apiKey });
+          }}
+        />
+      )}
+
+      {servers && servers.length > 1 && (
+        <FilterTabs
+          label="Show servers"
+          value={filter}
+          onValueChange={(value) => setFilter(value as Filter)}
+          tabs={[
+            { value: 'all', label: 'All', count: servers.length },
+            { value: 'ONLINE', label: 'Online', count: count('ONLINE') },
+            { value: 'OFFLINE', label: 'Offline', count: count('OFFLINE') },
+            { value: 'UNKNOWN', label: 'Waiting', count: count('UNKNOWN') },
+          ]}
+        />
+      )}
+
+      <Panel flush>
+        {!servers ? (
+          error ? (
+            <EmptyState
+              icon={AlertCircle}
+              tone="error"
+              title="Couldn't load your servers"
+              description={error}
+              action={
+                <Button size="sm" variant="outline" onClick={retry}>
+                  Try again
+                </Button>
+              }
+            />
+          ) : (
+            <SkeletonRows rows={4} />
           )
-        }
-      >
-        {!loaded ? (
-          <div className="space-y-3 p-5">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-12 animate-pulse rounded-lg bg-muted" />
-            ))}
-          </div>
         ) : servers.length === 0 ? (
           <EmptyState
             art="server"
             title="No servers yet"
-            description="Register a server, then start the agent on it with the key you get. Its metrics appear within seconds."
+            description="Add a server, then start its agent with the key you get. Metrics arrive within seconds."
             action={
-              canManage && !showForm ? (
-                <Button size="sm" onClick={onOpenForm}>
+              canManage &&
+              !adding &&
+              !connect && (
+                <Button size="sm" onClick={() => setAdding(true)}>
                   <Plus />
                   Add server
                 </Button>
-              ) : undefined
+              )
+            }
+          />
+        ) : shown.length === 0 ? (
+          <EmptyState
+            title={FILTER_EMPTY[filter]}
+            className="py-10"
+            action={
+              <Button size="sm" variant="outline" onClick={() => setFilter('all')}>
+                Show all servers
+              </Button>
             }
           />
         ) : (
-          <div className="overflow-x-auto [contain:paint]">
-            <table className="w-full min-w-[36rem] text-[14px]">
+          <>
+            {/* tablets and up: a table */}
+            <table className="hidden w-full text-[14px] md:table">
               <thead>
                 <tr className="border-b border-border text-left">
-                  <th className="hud-label px-5 py-3 font-medium">Server</th>
-                  <th className="hud-label px-5 py-3 font-medium">Status</th>
-                  <th className="hud-label px-5 py-3 font-medium">Last heartbeat</th>
-                  <th className="px-5 py-3">
-                    <span className="sr-only">Details</span>
+                  <th scope="col" className="text-label px-5 py-3 font-medium">
+                    Server
+                  </th>
+                  <th scope="col" className="text-label px-5 py-3 font-medium">
+                    Status
+                  </th>
+                  <th scope="col" className="text-label px-5 py-3 text-right font-medium">
+                    Last report
+                  </th>
+                  <th scope="col" className="text-label hidden px-5 py-3 text-right font-medium lg:table-cell">
+                    Added
+                  </th>
+                  <th scope="col" className="w-14 px-3 py-3">
+                    <span className="sr-only">Actions</span>
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {servers.map((s) => {
-                  const busy = busyId === s.id;
-                  return (
-                    <tr key={s.id} className="group border-b border-border/70 transition-colors last:border-0 hover:bg-accent/40">
-                      <td className="px-5 py-3.5">
-                        {renamingId === s.id ? (
-                          <form onSubmit={(e) => handleRename(e, s.id)} className="flex items-center gap-1.5">
-                            <label htmlFor={`rename-${s.id}`} className="sr-only">
-                              New name for {s.name}
-                            </label>
-                            <input
-                              id={`rename-${s.id}`}
-                              required
-                              minLength={2}
-                              maxLength={100}
-                              autoFocus
-                              value={renameValue}
-                              onChange={(e) => setRenameValue(e.target.value)}
-                              onKeyDown={(e) => e.key === 'Escape' && setRenamingId(null)}
-                              className={cn(fieldControlClass, 'h-8 max-w-56')}
-                            />
-                            <Button type="submit" size="icon-sm" variant="outline" disabled={busy} aria-label="Save name">
-                              <Check />
-                            </Button>
-                            <Button type="button" size="icon-sm" variant="ghost" onClick={() => setRenamingId(null)} aria-label="Cancel rename">
-                              <X />
-                            </Button>
-                          </form>
-                        ) : (
-                          <Link href={`/servers/${s.id}`} className="block rounded-sm">
-                            <span className="block font-semibold text-foreground">{s.name}</span>
-                            {s.hostname && <span className="block font-mono text-[12px] text-muted-foreground">{s.hostname}</span>}
-                          </Link>
-                        )}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <ServerStatusBadge status={s.status} />
-                      </td>
-                      <td className="px-5 py-3.5 font-mono text-[12.5px] tabular-nums text-muted-foreground">
-                        {timeSince(s.lastHeartbeat)}
-                      </td>
-                      <td className="px-5 py-3.5 text-right">
-                        {deletingId === s.id ? (
-                          <div className="inline-flex items-center gap-1.5">
-                            <span className="text-[13px] text-muted-foreground">Delete server and its metrics?</span>
-                            <Button size="sm" variant="destructive" disabled={busy} onClick={() => handleDelete(s.id)}>
-                              {busy ? 'Deleting...' : 'Delete'}
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => setDeletingId(null)}>
-                              Keep
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="inline-flex items-center gap-1">
-                            {canManage && (
-                              <>
-                                <Button size="icon-sm" variant="ghost" onClick={() => startRename(s)} aria-label={`Rename ${s.name}`} title="Rename">
-                                  <Pencil />
-                                </Button>
-                                <Button
-                                  size="icon-sm"
-                                  variant="ghost"
-                                  onClick={() => {
-                                    setRenamingId(null);
-                                    setDeletingId(s.id);
-                                  }}
-                                  aria-label={`Delete ${s.name}`}
-                                  title="Delete"
-                                  className="hover:text-destructive"
-                                >
-                                  <Trash2 />
-                                </Button>
-                              </>
-                            )}
-                            <Link
-                              href={`/servers/${s.id}`}
-                              className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'group-hover:text-foreground')}
-                            >
-                              Details
-                              <ArrowRight />
-                            </Link>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {shown.map((server) => (
+                  <tr
+                    key={server.id}
+                    className="relative border-b border-border transition-colors duration-[120ms] last:border-0 hover:bg-accent/40"
+                  >
+                    <td className="max-w-0 px-5 py-3.5 lg:w-[40%]">
+                      <ServerName
+                        server={server}
+                        renaming={renamingId === server.id}
+                        onSaved={(updated) => {
+                          replace(updated);
+                          setRenamingId(null);
+                        }}
+                        onCancel={() => setRenamingId(null)}
+                      />
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-3.5">
+                      <ServerStatusBadge status={server.status} />
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-3.5 text-right text-[13px] tabular-nums text-muted-foreground">
+                      <LastReport server={server} />
+                    </td>
+                    <td className="hidden whitespace-nowrap px-5 py-3.5 text-right text-[13px] tabular-nums text-muted-foreground lg:table-cell">
+                      {formatDate(server.createdAt)}
+                    </td>
+                    <td className="px-3 py-3.5 text-right">{menuFor(server)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
-          </div>
+
+            {/* phones: a stacked list */}
+            <ul className="divide-y divide-border md:hidden">
+              {shown.map((server) => (
+                <li key={server.id} className="relative flex items-start gap-2 py-3 pl-4 pr-2 transition-colors active:bg-accent/40">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <ServerName
+                        server={{ ...server, hostname: null }}
+                        renaming={renamingId === server.id}
+                        onSaved={(updated) => {
+                          replace(updated);
+                          setRenamingId(null);
+                        }}
+                        onCancel={() => setRenamingId(null)}
+                      />
+                      <ServerStatusBadge status={server.status} short className="shrink-0" />
+                    </div>
+                    <p className="mt-0.5 flex min-w-0 items-center gap-2 text-[12.5px] text-muted-foreground">
+                      {server.hostname && <span className="truncate font-mono">{server.hostname}</span>}
+                      {server.hostname && <span aria-hidden>·</span>}
+                      <span className="shrink-0 whitespace-nowrap">
+                        {server.lastHeartbeat ? 'Last report ' : ''}
+                        <LastReport server={server} never="No report yet" />
+                      </span>
+                    </p>
+                  </div>
+                  <div className="-my-1">{menuFor(server)}</div>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        {servers && servers.length > 0 && !canManage && (
+          <p className="border-t border-border px-4 py-3.5 text-[13.5px] text-muted-foreground sm:px-5">
+            Only owners, admins and DevOps engineers can add or change servers.
+          </p>
         )}
       </Panel>
+
+      <ConfirmDialog
+        open={!!confirm}
+        onOpenChange={(open) => !open && setConfirm(null)}
+        busy={confirmBusy}
+        error={confirmError}
+        destructive={confirm?.kind === 'delete'}
+        title={confirm?.kind === 'delete' ? `Delete ${confirm.server.name}?` : `Replace the agent key for ${confirm?.server.name}?`}
+        description={
+          confirm?.kind === 'delete'
+            ? 'Its metrics are deleted. Its alerts stay with their incidents.'
+            : 'The current key stops working right away. Restart the agent with the new key.'
+        }
+        confirmLabel={confirm?.kind === 'delete' ? 'Delete server' : 'Replace key'}
+        onConfirm={runConfirm}
+      />
     </div>
   );
 }
 
 function ServersPageInner() {
   const { user } = useAuth();
-  const [showForm, setShowForm] = useState(false);
+  const canManage = canManageServers(user?.role);
+  const openFromLink = useSearchParams().get('add') === '1';
+  const list = useServerList();
+  const [adding, setAdding] = useState(openFromLink && canManage);
+  const [connect, setConnect] = useState<Connect>(null);
+  const { servers, error, updatedAt } = list;
+  const online = servers?.filter((s) => s.status === 'ONLINE').length ?? 0;
+
   return (
     <AppShell
       title="Servers"
-      description="Every machine that sends its metrics to InfraSentinel. The list refreshes every 10 seconds."
+      meta={
+        servers &&
+        servers.length > 0 && (
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span>
+              {online} of {servers.length} online
+            </span>
+            <span aria-hidden className="h-3.5 w-px bg-border-strong" />
+            <LiveIndicator state={error ? 'paused' : 'live'} every="10 s" updatedAt={updatedAt} />
+          </span>
+        )
+      }
       actions={
-        canManageServers(user?.role) && (
-          <Button variant={showForm ? 'outline' : 'default'} onClick={() => setShowForm(!showForm)}>
-            {showForm ? <X /> : <Plus />}
-            {showForm ? 'Close' : 'Add server'}
+        canManage &&
+        !adding &&
+        !connect &&
+        !!servers &&
+        servers.length > 0 && (
+          <Button
+            className="flex-1 sm:flex-none"
+            onClick={() => {
+              setConnect(null);
+              setAdding(true);
+            }}
+          >
+            <Plus />
+            Add server
           </Button>
         )
       }
     >
-      <ServersContent showForm={showForm} onOpenForm={() => setShowForm(true)} onCloseForm={() => setShowForm(false)} />
+      <ServersContent
+        list={list}
+        canManage={canManage}
+        adding={adding}
+        setAdding={setAdding}
+        connect={connect}
+        setConnect={setConnect}
+      />
     </AppShell>
   );
 }
@@ -379,7 +646,10 @@ function ServersPageInner() {
 export default function ServersPage() {
   return (
     <ProtectedRoute>
-      <ServersPageInner />
+      {/* useSearchParams (?add=1 from the dashboard) needs a Suspense boundary */}
+      <Suspense fallback={null}>
+        <ServersPageInner />
+      </Suspense>
     </ProtectedRoute>
   );
 }
