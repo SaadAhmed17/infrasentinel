@@ -1,11 +1,11 @@
 'use client';
 
-import { ChevronDown, LogOut } from 'lucide-react';
+import { ChevronDown, LogOut, Settings } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { initialsFromEmail } from '@/lib/format';
 import { roleLabel } from '@/lib/roles';
 import { useShellState } from '@/lib/shell-store';
-import { DropdownMenu, MenuItem, MenuSeparator } from '@/components/ui/menu';
+import { DropdownMenu, MenuItem, MenuLinkItem, MenuSeparator } from '@/components/ui/menu';
 import { Skeleton } from '@/components/ui/skeleton';
 
 // Account button in the top bar: initials and organization name; the menu
@@ -40,6 +40,9 @@ export function ProfileMenu() {
         </p>
       </div>
       <MenuSeparator />
+      <MenuLinkItem href="/settings" icon={Settings}>
+        Settings
+      </MenuLinkItem>
       <MenuItem icon={LogOut} onClick={logout}>
         Sign out
       </MenuItem>

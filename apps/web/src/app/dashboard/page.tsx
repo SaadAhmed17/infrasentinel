@@ -2,15 +2,13 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { AlertCircle, CircleCheck, UserPlus, X } from 'lucide-react';
+import { AlertCircle, CircleCheck } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { ProtectedRoute } from '@/components/protected-route';
 import { AppShell } from '@/components/app-shell';
 import { SetupChecklist, SetupReminder, type SetupStep } from '@/components/dashboard/setup-checklist';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { CopyField } from '@/components/ui/copy-button';
 import { EmptyState } from '@/components/ui/empty-state';
-import { fieldControlClass, fieldLabelClass, fieldSelectClass } from '@/components/ui/form-styles';
 import { LiveIndicator } from '@/components/ui/live-indicator';
 import { Notice } from '@/components/ui/notice';
 import { Panel } from '@/components/ui/panel';
@@ -22,10 +20,10 @@ import { TONE_COLOR, type Tone } from '@/components/ui/tone';
 import { Tooltip } from '@/components/ui/tooltip';
 import { apiClient } from '@/lib/api-client';
 import { friendlyError, NETWORK_ERROR_MESSAGE } from '@/lib/errors';
-import { formatDate, formatRelative, formatTime, plural, initialsFromEmail } from '@/lib/format';
+import { formatRelative, formatTime, plural } from '@/lib/format';
 import { bySeverityThenRecent, incidentTitle, isOpenIncident } from '@/lib/incidents';
 import { canManageSecurity, canManageServers } from '@/lib/permissions';
-import { ROLE_LABELS, roleLabel } from '@/lib/roles';
+import { canManageTeam } from '@/lib/roles';
 import { RULE_TEMPLATES, templatePayload } from '@/lib/rule-templates';
 import { useShellState } from '@/lib/shell-store';
 import { useStoredFlag } from '@/lib/use-stored-flag';
@@ -98,7 +96,6 @@ const SERVER_TONE: Record<string, Tone> = { ONLINE: 'online', OFFLINE: 'offline'
 // Problems first in the fleet panel.
 const SERVER_ORDER: Record<string, number> = { OFFLINE: 0, UNKNOWN: 1, ONLINE: 2 };
 const OPEN_INCIDENTS_SHOWN = 6;
-const ROLES = Object.keys(ROLE_LABELS).filter((r) => r !== 'OWNER');
 
 async function fetchResources(names: Resource[]) {
   const results = await Promise.allSettled(names.map((name) => apiClient.get<unknown>(ENDPOINTS[name])));
@@ -676,148 +673,6 @@ function RecentDetectionsPanel({
   );
 }
 
-// Members and invitations stay here until they move to the Settings page.
-function MembersPanel({ members, error, onChanged }: { members: Member[] | null; error?: string; onChanged: () => void }) {
-  const { user } = useAuth();
-  const toast = useToast();
-  const [showInviteForm, setShowInviteForm] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('DEVELOPER');
-  const [inviting, setInviting] = useState(false);
-  const [inviteError, setInviteError] = useState('');
-  const [inviteLink, setInviteLink] = useState<string | null>(null);
-  const canManageMembers = user?.role === 'OWNER' || user?.role === 'ADMIN';
-
-  async function handleInvite(e: React.FormEvent) {
-    e.preventDefault();
-    setInviting(true);
-    setInviteError('');
-    try {
-      const result = await apiClient.post<{ inviteLink: string }>('/organizations/invitations', {
-        email: inviteEmail,
-        role: inviteRole,
-      });
-      setInviteLink(result.inviteLink);
-      setInviteEmail('');
-    } catch (err) {
-      setInviteError(friendlyError(err, "Couldn't create the invitation. Try again."));
-    } finally {
-      setInviting(false);
-    }
-  }
-
-  async function handleRoleChange(member: Member, role: string) {
-    try {
-      await apiClient.patch(`/organizations/members/${member.id}/role`, { role });
-      toast.success('Role changed', `${member.email} is now ${roleLabel(role)}.`);
-      onChanged();
-    } catch (err) {
-      toast.error("Couldn't change the role", friendlyError(err));
-    }
-  }
-
-  return (
-    <Panel
-      id="team"
-      title="Team"
-      meta={members ? plural(members.length, 'member') : undefined}
-      flush
-      actions={
-        canManageMembers && (
-          <Button size="sm" variant={showInviteForm ? 'outline' : 'default'} onClick={() => setShowInviteForm(!showInviteForm)}>
-            {showInviteForm ? <X /> : <UserPlus />}
-            {showInviteForm ? 'Close' : 'Invite people'}
-          </Button>
-        )
-      }
-    >
-      {showInviteForm && (
-        <div className="space-y-3 border-b border-border bg-surface-2/50 px-4 py-4 sm:px-5">
-          <form onSubmit={handleInvite} className="flex flex-wrap items-end gap-3">
-            <div className="min-w-0 flex-1 basis-56">
-              <label htmlFor="invite-email" className={fieldLabelClass}>
-                Email
-              </label>
-              <input
-                id="invite-email"
-                type="email"
-                required
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder="colleague@company.com"
-                className={fieldControlClass}
-              />
-            </div>
-            <div className="w-full sm:w-56">
-              <label htmlFor="invite-role" className={fieldLabelClass}>
-                Role
-              </label>
-              <select id="invite-role" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)} className={fieldSelectClass}>
-                {ROLES.map((r) => (
-                  <option key={r} value={r}>
-                    {roleLabel(r)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <Button type="submit" disabled={inviting} className="w-full sm:w-auto">
-              {inviting ? 'Creating link…' : 'Create invitation'}
-            </Button>
-          </form>
-          {inviteError && <Notice tone="error">{inviteError}</Notice>}
-          {inviteLink && (
-            <Notice tone="success">
-              <p className="font-medium">Invitation created. Send this link to your colleague:</p>
-              <CopyField value={inviteLink} label="Invitation link" ariaLabel="Copy invitation link" />
-            </Notice>
-          )}
-        </div>
-      )}
-
-      {!members ? (
-        error ? (
-          <p className="px-4 py-4 text-[13.5px] text-muted-foreground sm:px-5">{error}</p>
-        ) : (
-          <SkeletonRows rows={3} />
-        )
-      ) : (
-        <ul className="divide-y divide-border">
-          {members.map((m) => (
-            <li key={m.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-5">
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/12 text-[12px] font-semibold text-primary-bright">
-                {initialsFromEmail(m.email)}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[14px] font-medium text-foreground">
-                  {m.email}
-                  {m.id === user?.userId && <span className="ml-1.5 font-normal text-muted-foreground">(you)</span>}
-                </span>
-                <span className="block text-[12.5px] text-muted-foreground">Joined {formatDate(m.createdAt)}</span>
-              </span>
-              {canManageMembers && m.role !== 'OWNER' ? (
-                <select
-                  value={m.role}
-                  onChange={(e) => handleRoleChange(m, e.target.value)}
-                  aria-label={`Role of ${m.email}`}
-                  className={cn(fieldSelectClass, 'h-9 w-full text-[13.5px] sm:w-48')}
-                >
-                  {ROLES.map((r) => (
-                    <option key={r} value={r}>
-                      {roleLabel(r)}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <span className="text-[13px] font-medium text-muted-foreground">{roleLabel(m.role)}</span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </Panel>
-  );
-}
-
 // ---------------------------------------------------------------------------
 
 type Dashboard = ReturnType<typeof useDashboardData>;
@@ -832,7 +687,7 @@ function DashboardContent({ dashboard }: { dashboard: Dashboard }) {
 
   const canAddServers = canManageServers(user?.role);
   const canAddRules = canManageSecurity(user?.role);
-  const canInvite = user?.role === 'OWNER' || user?.role === 'ADMIN';
+  const canInvite = canManageTeam(user?.role);
 
   async function addRecommendedRules() {
     setAddingRules(true);
@@ -909,9 +764,9 @@ function DashboardContent({ dashboard }: { dashboard: Dashboard }) {
       description: 'Add the people who look after these servers, each with their own role.',
       done: !!members && members.length > 1,
       action: canInvite && (
-        <a href="#team" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+        <Link href="/settings?invite=1" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
           Invite people
-        </a>
+        </Link>
       ),
       note: 'Owners and admins can invite people.',
     },
@@ -972,7 +827,6 @@ function DashboardContent({ dashboard }: { dashboard: Dashboard }) {
         </>
       )}
 
-      <MembersPanel members={members} error={errors.members} onChanged={() => reload('members')} />
     </div>
   );
 }

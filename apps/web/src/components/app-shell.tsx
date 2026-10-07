@@ -10,6 +10,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Server,
+  Settings,
   Siren,
   type LucideIcon,
 } from 'lucide-react';
@@ -81,6 +82,58 @@ function UtcClock() {
   );
 }
 
+// Settings sits at the bottom of the sidebar (and in the account menu on phones).
+const SETTINGS_ITEM: NavItem = { href: '/settings', label: 'Settings', short: 'Settings', icon: Settings };
+
+function SidebarLink({
+  item,
+  active,
+  count,
+  collapsed,
+  showLabels,
+}: {
+  item: NavItem;
+  active: boolean;
+  count: number | null;
+  collapsed: boolean;
+  showLabels: boolean;
+}) {
+  const Icon = item.icon;
+  const labelClass = collapsed ? 'hidden' : 'hidden lg:inline';
+  return (
+    <Tooltip side="right" disabled={showLabels} content={count ? `${item.label} (${countLabel(count)} open)` : item.label}>
+      <Link
+        href={item.href}
+        aria-current={active ? 'page' : undefined}
+        aria-label={showLabels ? undefined : count ? `${item.label}, ${count} open` : item.label}
+        className={cn(
+          'relative flex h-10 items-center justify-center gap-3 rounded-lg px-3 text-[14px] font-medium transition-colors duration-[120ms]',
+          !collapsed && 'lg:justify-start',
+          active ? 'bg-sidebar-accent text-foreground' : 'text-muted-foreground hover:bg-sidebar-accent/70 hover:text-foreground',
+        )}
+      >
+        {active && <span aria-hidden className="absolute -left-3 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary-bright" />}
+        <Icon className={cn('size-[18px] shrink-0', active && 'text-primary-bright')} strokeWidth={1.75} aria-hidden />
+        <span className={cn('flex-1 truncate', labelClass)}>{item.label}</span>
+        {count !== null && (
+          <>
+            <span
+              className={cn(
+                'min-w-5 rounded-md bg-sev-critical/15 px-1.5 text-center text-[11.5px] font-semibold tabular-nums leading-5 text-sev-critical',
+                labelClass,
+              )}
+            >
+              {countLabel(count)}
+              <span className="sr-only"> open</span>
+            </span>
+            <span aria-hidden className={cn('absolute right-2 top-2 size-1.5 rounded-full bg-sev-critical', !collapsed && 'lg:hidden')} />
+          </>
+        )}
+      </Link>
+    </Tooltip>
+  );
+}
+
 function isActive(pathname: string | null, href: string) {
   return pathname === href || pathname?.startsWith(href + '/');
 }
@@ -112,7 +165,6 @@ export function AppShell({
   // Widths and labels come from CSS (rail below 1024 px or when collapsed);
   // the screen-size check only decides whether the rail needs tooltips.
   const showLabels = wide && !collapsed;
-  const labelClass = collapsed ? 'hidden' : 'hidden lg:inline';
 
   useEffect(() => {
     loadOrganization();
@@ -152,61 +204,34 @@ export function AppShell({
 
         <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="Main">
           <ul className="space-y-1">
-            {NAV.map((item) => {
-              const active = isActive(pathname, item.href);
-              const Icon = item.icon;
-              const count = item.showIncidentCount ? incidentCount : null;
-              const link = (
-                <Link
-                  href={item.href}
-                  aria-current={active ? 'page' : undefined}
-                  aria-label={showLabels ? undefined : count ? `${item.label}, ${count} open` : item.label}
-                  className={cn(
-                    'relative flex h-10 items-center justify-center gap-3 rounded-lg px-3 text-[14px] font-medium transition-colors duration-[120ms]',
-                    !collapsed && 'lg:justify-start',
-                    active ? 'bg-sidebar-accent text-foreground' : 'text-muted-foreground hover:bg-sidebar-accent/70 hover:text-foreground',
-                  )}
-                >
-                  {active && <span aria-hidden className="absolute -left-3 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary-bright" />}
-                  <Icon className={cn('size-[18px] shrink-0', active && 'text-primary-bright')} strokeWidth={1.75} aria-hidden />
-                  <span className={cn('flex-1 truncate', labelClass)}>{item.label}</span>
-                  {count !== null && (
-                    <>
-                      <span
-                        className={cn(
-                          'min-w-5 rounded-md bg-sev-critical/15 px-1.5 text-center text-[11.5px] font-semibold tabular-nums leading-5 text-sev-critical',
-                          labelClass,
-                        )}
-                      >
-                        {countLabel(count)}
-                        <span className="sr-only"> open</span>
-                      </span>
-                      <span
-                        aria-hidden
-                        className={cn('absolute right-2 top-2 size-1.5 rounded-full bg-sev-critical', !collapsed && 'lg:hidden')}
-                      />
-                    </>
-                  )}
-                </Link>
-              );
-              return (
-                <li key={item.href}>
-                  <Tooltip side="right" disabled={showLabels} content={count ? `${item.label} (${countLabel(count)} open)` : item.label}>
-                    {link}
-                  </Tooltip>
-                </li>
-              );
-            })}
+            {NAV.map((item) => (
+              <li key={item.href}>
+                <SidebarLink
+                  item={item}
+                  active={!!isActive(pathname, item.href)}
+                  count={item.showIncidentCount ? incidentCount : null}
+                  collapsed={collapsed}
+                  showLabels={showLabels}
+                />
+              </li>
+            ))}
           </ul>
         </nav>
 
-        <div className="hidden border-t border-sidebar-border p-3 lg:block">
+        <div className="space-y-1 border-t border-sidebar-border p-3">
+          <SidebarLink
+            item={SETTINGS_ITEM}
+            active={!!isActive(pathname, SETTINGS_ITEM.href)}
+            count={null}
+            collapsed={collapsed}
+            showLabels={showLabels}
+          />
           <button
             onClick={toggleCollapsed}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             className={cn(
-              'flex h-9 w-full items-center gap-3 rounded-lg px-3 text-[13.5px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground',
+              'hidden h-9 w-full items-center gap-3 rounded-lg px-3 text-[13.5px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground lg:flex',
               collapsed && 'justify-center',
             )}
           >

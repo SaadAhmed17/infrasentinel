@@ -61,6 +61,17 @@ export function formatRelative(value: DateInput | null | undefined, now = Date.n
   return formatDate(value);
 }
 
+/** Time left until a moment: "in 6 days", "in 5 h", "in 12 min"; null once it has passed. */
+export function formatTimeUntil(value: DateInput, now = Date.now()) {
+  const seconds = Math.round((toDate(value).getTime() - now) / 1000);
+  if (seconds <= 0) return null;
+  const days = Math.floor(seconds / 86400);
+  if (days >= 1) return days === 1 ? 'in 1 day' : `in ${days} days`;
+  const hours = Math.floor(seconds / 3600);
+  if (hours >= 1) return `in ${hours} h`;
+  return `in ${Math.max(1, Math.floor(seconds / 60))} min`;
+}
+
 /** 30 -> "30 s", 300 -> "5 min", 5400 -> "1 h 30 min", 172800 -> "2 days" */
 export function formatDuration(totalSeconds: number) {
   const seconds = Math.round(totalSeconds);
