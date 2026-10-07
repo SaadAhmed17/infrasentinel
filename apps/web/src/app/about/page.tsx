@@ -21,7 +21,7 @@ export default function AboutPage() {
   return (
     <PublicShell>
       <section className="mx-auto max-w-7xl px-6 pb-20 pt-10 lg:px-10 lg:pt-16">
-        <PublicPageHeader eyebrow="About" title="About InfraSentinel">
+        <PublicPageHeader title="About InfraSentinel">
           An AI-augmented infrastructure monitoring platform built as a Final Year Project. It brings together
           three things usually kept in separate tools: server performance monitoring, security event detection
           (SIEM), and AI-based anomaly detection, with a plain-language assistant to explain what it finds.

@@ -1,34 +1,41 @@
 'use client';
 
 import Link from 'next/link';
-import { Activity, ArrowRight, BrainCircuit, Bot, ShieldAlert } from 'lucide-react';
+import { Activity, BrainCircuit, Bot, ShieldAlert } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { RackSkyline } from '@/components/auth/rack-skyline';
 import { DetectionFeed } from '@/components/landing/detection-feed';
 import { PublicShell } from '@/components/public-shell';
 import { buttonVariants } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
 
 const CAPABILITIES = [
   {
     icon: Activity,
     title: 'Server health',
     text: 'A small agent sends CPU, memory, disk and network figures every 10 seconds. Servers that stop reporting are marked offline.',
+    href: '/features#monitoring',
+    link: 'More about server health',
   },
   {
     icon: ShieldAlert,
     title: 'Detection rules',
     text: 'SSH and web login brute force, credential stuffing, sudo by unapproved users, API floods, crashes and threshold breaches.',
+    href: '/features#rules',
+    link: 'More about detection rules',
   },
   {
     icon: BrainCircuit,
     title: 'Anomaly detection',
-    text: 'An LSTM autoencoder learns what normal looks like for each server and flags behaviour no fixed threshold would catch.',
+    text: 'An LSTM autoencoder learns what normal looks like for each server and flags behavior no fixed threshold would catch.',
+    href: '/features#anomaly',
+    link: 'More about anomaly detection',
   },
   {
     icon: Bot,
     title: 'AI assistant',
     text: 'Ask what happened in plain language. Answers come from your own incident history, with the incidents they are based on.',
+    href: '/features#assistant',
+    link: 'More about the assistant',
   },
 ];
 
@@ -39,36 +46,36 @@ const STEPS = [
   { title: 'Investigate and resolve', text: 'Review the evidence, ask the assistant, and mark the incident resolved.' },
 ];
 
-const FACTS = [
-  { value: '10 s', label: 'between agent reports' },
-  { value: '30 s', label: 'between rule evaluations' },
-  { value: '6', label: 'roles, from Owner to Viewer' },
-  { value: '500+', label: 'automated tests on every change' },
+const SPECS = [
+  { label: 'Agent reports', value: 'Every 10 seconds' },
+  { label: 'Rule evaluation', value: 'Every 30 seconds' },
+  { label: 'Rule types', value: '6: metric threshold, event frequency, heartbeat missing, credential stuffing, anomaly, unusual access' },
+  { label: 'Anomaly model', value: 'LSTM autoencoder, one per server' },
+  { label: 'Roles', value: '6, from Owner to Viewer' },
+  { label: 'Automated tests', value: '500+ across the API, AI service and agents' },
 ];
+
+const sectionTitle = 'font-display text-[28px] font-semibold leading-tight tracking-[-0.03em] text-foreground sm:text-[36px]';
 
 export default function Home() {
   const { user } = useAuth();
-  const primaryCta = user
-    ? { href: '/dashboard', label: 'Open dashboard' }
-    : { href: '/signup', label: 'Create organization' };
+  const primaryCta = user ? { href: '/dashboard', label: 'Open dashboard' } : { href: '/signup', label: 'Create organization' };
 
   return (
     <PublicShell>
-      {/* Hero */}
-      <section className="mx-auto grid max-w-7xl items-center gap-14 px-6 pb-20 pt-10 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:px-10 lg:pb-28 lg:pt-16">
+      {/* hero */}
+      <section className="mx-auto grid max-w-7xl items-center gap-12 px-6 pb-20 pt-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:gap-14 lg:px-10 lg:pb-28 lg:pt-16">
         <div className="animate-fade-up">
-          <p className="hud-label">Infrastructure security monitoring</p>
-          <h1 className="mt-6 font-display text-[44px] font-semibold leading-[1.02] tracking-[-0.04em] text-foreground sm:text-[56px] xl:text-[68px]">
-            Your servers, <span className="text-primary-bright">under watch.</span>
+          <h1 className="font-display text-[40px] font-semibold leading-[1.04] tracking-[-0.04em] text-foreground sm:text-[56px] xl:text-[64px]">
+            Your servers, under watch.
           </h1>
-          <p className="mt-7 max-w-xl text-[17px] leading-relaxed text-muted-foreground">
-            InfraSentinel collects live metrics and security events from your servers, checks them against
-            detection rules every 30 seconds, and uses an LSTM model to spot what the rules miss.
+          <p className="mt-6 max-w-xl text-[17px] leading-relaxed text-muted-foreground sm:mt-7">
+            InfraSentinel collects live metrics and security events from your servers, checks them against detection rules
+            every 30 seconds, and uses an LSTM model to spot what the rules miss.
           </p>
-          <div className="mt-10 flex flex-wrap items-center gap-3">
+          <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             <Link href={primaryCta.href} className={buttonVariants({ size: 'lg' })}>
               {primaryCta.label}
-              <ArrowRight className="size-4" />
             </Link>
             {!user && (
               <Link href="/login" className={buttonVariants({ variant: 'outline', size: 'lg' })}>
@@ -82,80 +89,76 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Capabilities */}
-      <section id="capabilities" className="scroll-mt-8 border-y border-border bg-surface/55 backdrop-blur-sm">
+      {/* capabilities */}
+      <section id="capabilities" className="scroll-mt-8 border-y border-border bg-surface">
         <div className="mx-auto max-w-7xl px-6 py-20 lg:px-10 lg:py-24">
-          <p className="hud-label">What it watches</p>
-          <h2 className="mt-4 max-w-2xl font-display text-[30px] font-semibold leading-tight tracking-[-0.03em] text-foreground sm:text-[36px]">
-            One console for health, threats and the unknown.
-          </h2>
-          <div className="mt-12 grid gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-2 lg:grid-cols-4">
-            {CAPABILITIES.map(({ icon: Icon, title, text }) => (
-              <div key={title} className="bg-card p-6">
-                <span className="flex size-10 items-center justify-center rounded-lg border border-primary/25 bg-primary/10 text-primary-bright">
-                  <Icon className="size-5" strokeWidth={1.8} />
-                </span>
-                <h3 className="mt-5 text-[16px] font-semibold text-foreground">{title}</h3>
-                <p className="mt-2 text-[14px] leading-relaxed text-muted-foreground">{text}</p>
-              </div>
+          <h2 className={`${sectionTitle} max-w-2xl`}>One console for health, threats and the unknown.</h2>
+          <ul className="mt-12 grid divide-y divide-border sm:grid-cols-2 sm:gap-x-10 sm:gap-y-12 sm:divide-y-0 lg:grid-cols-4">
+            {CAPABILITIES.map(({ icon: Icon, title, text, href, link }) => (
+              <li key={title} className="flex flex-col py-6 first:pt-0 last:pb-0 sm:py-0">
+                <h3 className="flex items-center gap-2.5 text-[16px] font-semibold text-foreground">
+                  <Icon className="size-5 text-primary-bright" strokeWidth={1.75} aria-hidden />
+                  {title}
+                </h3>
+                <p className="mt-2.5 flex-1 text-[14.5px] leading-relaxed text-muted-foreground">{text}</p>
+                <Link href={href} className="mt-3 text-[14px] font-semibold text-primary underline-offset-4 hover:underline">
+                  {link}
+                </Link>
+              </li>
             ))}
-          </div>
-          <Link href="/services" className={cn(buttonVariants({ variant: 'outline' }), 'mt-8')}>
-            See everything it does
-            <ArrowRight className="size-4" />
+          </ul>
+          <Link href="/features" className="mt-12 inline-block text-[14.5px] font-semibold text-primary underline-offset-4 hover:underline">
+            All features
           </Link>
         </div>
       </section>
 
-      {/* How it works */}
+      {/* how it works */}
       <section id="how-it-works" className="scroll-mt-8 mx-auto max-w-7xl px-6 py-20 lg:px-10 lg:py-24">
-        <p className="hud-label">How it works</p>
-        <h2 className="mt-4 max-w-2xl font-display text-[30px] font-semibold leading-tight tracking-[-0.03em] text-foreground sm:text-[36px]">
-          From agent to answer in four steps.
-        </h2>
-        <ol className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+        <h2 className={`${sectionTitle} max-w-2xl`}>From agent to answer in four steps.</h2>
+        <ol className="relative mt-12 grid gap-8 lg:grid-cols-4 lg:gap-10">
+          {/* the timeline: down the side on phones, along the top on desktop */}
+          <span aria-hidden className="absolute bottom-2 left-[5px] top-2 w-px bg-border-strong lg:inset-x-0 lg:bottom-auto lg:left-0 lg:top-[5px] lg:h-px lg:w-auto" />
           {STEPS.map((step, i) => (
-            <li key={step.title} className="relative border-t border-border-strong pt-6">
-              <span className="absolute -top-px left-0 h-px w-12 bg-primary-bright" aria-hidden />
-              <p className="font-mono text-[12px] font-semibold text-primary-bright">Step {i + 1}</p>
-              <h3 className="mt-3 text-[16px] font-semibold text-foreground">{step.title}</h3>
-              <p className="mt-2 text-[14px] leading-relaxed text-muted-foreground">{step.text}</p>
+            <li key={step.title} className="relative pl-8 lg:pl-0 lg:pt-8">
+              <span aria-hidden className="absolute left-0 top-1 size-[11px] rounded-full border-2 border-primary-bright bg-background lg:top-0" />
+              <p className="text-[13px] font-semibold text-primary-bright">Step {i + 1}</p>
+              <h3 className="mt-1.5 text-[16px] font-semibold text-foreground">{step.title}</h3>
+              <p className="mt-2 text-[14.5px] leading-relaxed text-muted-foreground">{step.text}</p>
             </li>
           ))}
         </ol>
+      </section>
 
-        <dl className="mt-20 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border lg:grid-cols-4">
-          {FACTS.map((fact) => (
-            <div key={fact.label} className="bg-card px-6 py-7">
-              <dt className="sr-only">{fact.label}</dt>
-              <dd>
-                <span className="block font-display text-[34px] font-semibold leading-none tracking-[-0.03em] text-foreground">
-                  {fact.value}
-                </span>
-                <span className="mt-3 block text-[13.5px] text-muted-foreground">{fact.label}</span>
-              </dd>
+      {/* at a glance */}
+      <section className="mx-auto max-w-7xl px-6 pb-20 lg:px-10 lg:pb-24">
+        <h2 className={sectionTitle}>At a glance</h2>
+        <dl className="mt-8 divide-y divide-border border-y border-border">
+          {SPECS.map((spec) => (
+            <div key={spec.label} className="grid gap-1 py-4 sm:grid-cols-[14rem_minmax(0,1fr)] sm:gap-6">
+              <dt className="text-[14px] text-muted-foreground">{spec.label}</dt>
+              <dd className="text-[15px] text-foreground">{spec.value}</dd>
             </div>
           ))}
         </dl>
       </section>
 
-      {/* Closing call to action */}
+      {/* closing call to action */}
       <section className="relative overflow-hidden border-t border-border">
         <div className="relative z-10 mx-auto flex max-w-7xl flex-col items-start gap-8 px-6 pt-20 lg:flex-row lg:items-end lg:justify-between lg:px-10">
           <div>
-            <h2 className="max-w-xl font-display text-[30px] font-semibold leading-tight tracking-[-0.03em] text-foreground sm:text-[38px]">
-              Start watching your fleet today.
-            </h2>
+            <h2 className={`${sectionTitle} max-w-xl`}>Start watching your fleet today.</h2>
             <p className="mt-4 max-w-md text-[15.5px] text-muted-foreground">
               Create an organization, add your first server and invite your team when you are ready.
             </p>
           </div>
           <Link href={primaryCta.href} className={buttonVariants({ size: 'lg' })}>
             {primaryCta.label}
-            <ArrowRight className="size-4" />
           </Link>
         </div>
-        <RackSkyline variant="wide" className="mt-12 h-56 w-full sm:h-72 xl:h-80" />
+        {/* the narrow scene on phones, so the sun stays whole */}
+        <RackSkyline className="mt-12 h-48 w-full sm:hidden" />
+        <RackSkyline variant="wide" className="mt-12 hidden h-72 w-full sm:block xl:h-80" />
       </section>
     </PublicShell>
   );

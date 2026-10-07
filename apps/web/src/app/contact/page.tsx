@@ -45,7 +45,7 @@ export default function ContactPage() {
   return (
     <PublicShell>
       <section className="mx-auto max-w-7xl px-6 pb-16 pt-10 lg:px-10 lg:pt-16">
-        <PublicPageHeader eyebrow="Contact" title="Get in touch">
+        <PublicPageHeader title="Get in touch">
           Questions about InfraSentinel, its architecture or this Final Year Project? Reach the team through the
           channels below.
         </PublicPageHeader>

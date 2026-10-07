@@ -16,19 +16,10 @@ export function PublicShell({ children }: { children: ReactNode }) {
 }
 
 // Heading block used at the top of each public page.
-export function PublicPageHeader({
-  eyebrow,
-  title,
-  children,
-}: {
-  eyebrow: string;
-  title: ReactNode;
-  children?: ReactNode;
-}) {
+export function PublicPageHeader({ title, children }: { title: ReactNode; children?: ReactNode }) {
   return (
     <div className="animate-fade-up">
-      <p className="hud-label">{eyebrow}</p>
-      <h1 className="mt-5 max-w-3xl font-display text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] text-foreground sm:text-[50px]">
+      <h1 className="max-w-3xl font-display text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] text-foreground sm:text-[50px]">
         {title}
       </h1>
       {children && <p className="mt-6 max-w-2xl text-[17px] leading-relaxed text-muted-foreground">{children}</p>}
