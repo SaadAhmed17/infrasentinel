@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api-client';
+import { resetShellState } from '@/lib/shell-store';
 
 interface User {
   userId: string;
@@ -48,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Saves the tokens, sets the signed-in user and opens the dashboard.
   function startSession(data: Tokens) {
+    resetShellState();
     localStorage.setItem('accessToken', data.accessToken);
     localStorage.setItem('refreshToken', data.refreshToken);
     const payload = JSON.parse(atob(data.accessToken.split('.')[1]));
@@ -68,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   function logout() {
+    resetShellState();
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     setUser(null);

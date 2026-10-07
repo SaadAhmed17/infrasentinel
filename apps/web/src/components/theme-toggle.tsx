@@ -27,11 +27,11 @@ export function ThemeToggle() {
   return (
     <button
       onClick={toggle}
-      className="flex size-9 items-center justify-center rounded-lg border border-border bg-surface-2/50 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      className="flex size-9 items-center justify-center rounded-lg border border-border bg-surface-2/60 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground pointer-coarse:size-11"
       aria-label={label}
       title={label}
     >
-      {dark ? <Sun className="size-[17px]" strokeWidth={1.8} /> : <Moon className="size-[17px]" strokeWidth={1.8} />}
+      {dark ? <Sun className="size-[17px]" strokeWidth={1.75} /> : <Moon className="size-[17px]" strokeWidth={1.75} />}
     </button>
   );
 }

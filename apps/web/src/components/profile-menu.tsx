@@ -1,76 +1,48 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, LogOut } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
+import { initialsFromEmail } from '@/lib/format';
 import { roleLabel } from '@/lib/roles';
-import { cn } from '@/lib/utils';
+import { useShellState } from '@/lib/shell-store';
+import { DropdownMenu, MenuItem, MenuSeparator } from '@/components/ui/menu';
+import { Skeleton } from '@/components/ui/skeleton';
 
-function initials(email?: string) {
-  if (!email) return '?';
-  return email.slice(0, 2).toUpperCase();
-}
-
+// Account button in the top bar: initials and organization name; the menu
+// holds who is signed in and the account actions.
 export function ProfileMenu() {
   const { user, logout } = useAuth();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function onClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('mousedown', onClickOutside);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onClickOutside);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, []);
+  const { orgName } = useShellState();
 
   return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className={cn(
-          'flex h-9 items-center gap-2.5 rounded-lg border border-border bg-surface-2/50 pl-1 pr-2.5 transition-colors hover:bg-accent',
-          open && 'bg-accent',
-        )}
-      >
-        <span className="flex size-7 items-center justify-center rounded-md bg-primary/15 font-mono text-[11px] font-semibold text-primary-bright">
-          {initials(user?.email)}
-        </span>
-        <span className="hidden max-w-40 truncate text-[13.5px] font-medium text-foreground sm:block">{user?.email}</span>
-        <ChevronDown className={cn('size-3.5 text-muted-foreground transition-transform', open && 'rotate-180')} strokeWidth={2} />
-      </button>
-
-      {open && (
-        <div
-          role="menu"
-          className="absolute right-0 top-full z-40 mt-2 w-64 animate-in rounded-xl border border-border-strong bg-popover p-1.5 shadow-[var(--shadow-panel)] fade-in-0 zoom-in-95"
+    <DropdownMenu
+      trigger={
+        <button
+          type="button"
+          aria-label={`Account menu for ${user?.email ?? 'you'}`}
+          className="flex h-9 items-center gap-2.5 rounded-lg border border-border bg-surface-2/60 pl-1 pr-1 transition-colors hover:bg-accent data-[popup-open]:bg-accent sm:pr-2.5 pointer-coarse:h-11"
         >
-          <div className="px-3 py-2.5">
-            <p className="truncate text-[13.5px] font-medium text-foreground">{user?.email}</p>
-            <p className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-              {roleLabel(user?.role)}
-            </p>
-          </div>
-          <div className="my-1 h-px bg-border" />
-          <button
-            role="menuitem"
-            onClick={logout}
-            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13.5px] font-medium text-foreground transition-colors hover:bg-accent"
-          >
-            <LogOut className="size-4 text-muted-foreground" strokeWidth={1.8} />
-            Log out
-          </button>
-        </div>
-      )}
-    </div>
+          <span className="flex size-7 items-center justify-center rounded-md bg-primary/15 text-[11.5px] font-semibold text-primary-bright pointer-coarse:size-9">
+            {initialsFromEmail(user?.email)}
+          </span>
+          <span className="hidden max-w-44 truncate text-[13.5px] font-medium text-foreground sm:block">
+            {orgName ?? <Skeleton className="h-3.5 w-24" />}
+          </span>
+          <ChevronDown className="hidden size-3.5 text-muted-foreground sm:block" strokeWidth={1.75} aria-hidden />
+        </button>
+      }
+    >
+      <div className="px-2.5 pb-2 pt-1.5">
+        <p className="truncate text-[13.5px] font-medium text-foreground">{user?.email}</p>
+        <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">
+          {roleLabel(user?.role)}
+          {orgName && ` at ${orgName}`}
+        </p>
+      </div>
+      <MenuSeparator />
+      <MenuItem icon={LogOut} onClick={logout}>
+        Sign out
+      </MenuItem>
+    </DropdownMenu>
   );
 }
