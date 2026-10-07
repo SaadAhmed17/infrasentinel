@@ -55,9 +55,6 @@
 
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
   --color-chart-grid: var(--chart-grid);
 
   --color-sidebar: var(--sidebar);
@@ -161,9 +158,6 @@
   /* chart series, checked with the dataviz validator (chroma, lightness band, colour-blind separation, 3:1) */
   --chart-1: #018e7d;
   --chart-2: #3b5bd4;
-  --chart-3: #c2410c;
-  --chart-4: #7c3aed;
-  --chart-5: #a16207;
   --chart-grid: rgb(11 23 36 / 0.08);
 
   --sidebar: #f1f4f6;
@@ -243,9 +237,6 @@
 
   --chart-1: #06a89d;
   --chart-2: #6082e9;
-  --chart-3: #ff8f3f;
-  --chart-4: #b18cff;
-  --chart-5: #f2c14e;
   --chart-grid: rgb(148 178 204 / 0.09);
 
   --sidebar: #0a111a;

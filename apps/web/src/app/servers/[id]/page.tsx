@@ -1,30 +1,24 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
 import { ArrowLeft, BrainCircuit, Cpu, Gauge, HardDrive, MemoryStick, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { ProtectedRoute } from '@/components/protected-route';
 import { AppShell } from '@/components/app-shell';
 import { apiClient } from '@/lib/api-client';
-import { axisProps, gridProps, tooltipProps } from '@/lib/chart-theme';
+import { downsample, withGaps } from '@/lib/chart-data';
+import { chartColors } from '@/lib/chart-theme';
+import { formatRate } from '@/lib/format';
+import { ChartReadings, LegendKey, type Threshold } from '@/components/charts/chart-kit';
+import { lastValue, RateChart, SingleChart, UsageCharts, type MetricRow } from '@/components/charts/server-charts';
 import { buttonVariants } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Notice } from '@/components/ui/notice';
 import { Panel } from '@/components/ui/panel';
 import { StatTile } from '@/components/ui/stat-tile';
 import { ServerStatusBadge } from '@/components/ui/status';
+import { FilterTabs } from '@/components/ui/tabs';
 import { TONE_COLOR, type Tone } from '@/components/ui/tone';
 
 interface Metric {
@@ -51,30 +45,40 @@ interface AnomalyScore {
   isAnomaly?: boolean;
   error?: string;
 }
+interface Rule {
+  name: string;
+  ruleType: string;
+  metricField: string | null;
+  operator: string | null;
+  threshold: number | null;
+  severity: string;
+  isActive: boolean;
+}
 
-const SERIES = {
-  cpu: 'var(--chart-1)',
-  memory: 'var(--chart-2)',
-  disk: 'var(--chart-3)',
-  read: 'var(--chart-2)',
-  write: 'var(--chart-3)',
-  netIn: 'var(--chart-1)',
-  netOut: 'var(--chart-4)',
-  processes: 'var(--chart-2)',
-  load: 'var(--chart-5)',
+// Time ranges for the charts (the agent reports every 10 s). Longer ranges
+// refresh less often and are thinned to about 300 points.
+const RANGES = [
+  { value: '10m', label: '10 min', minutes: 10, limit: 60, every: 10_000 },
+  { value: '1h', label: '1 h', minutes: 60, limit: 360, every: 30_000 },
+  { value: '6h', label: '6 h', minutes: 360, limit: 2160, every: 60_000 },
+];
+
+// Which chart each metric-threshold rule belongs to.
+const METRIC_KEY: Record<string, keyof Omit<MetricRow, 't'>> = {
+  CPU_USAGE: 'cpu',
+  MEM_USAGE: 'mem',
+  DISK_USAGE: 'disk',
+  NETWORK_IN: 'netIn',
+  NETWORK_OUT: 'netOut',
+  DISK_READ_RATE: 'read',
+  DISK_WRITE_RATE: 'write',
+  PROCESS_COUNT: 'processes',
+  LOAD_AVERAGE: 'load',
 };
 
-function formatRate(value: number | null | undefined) {
-  if (value == null) return '—';
-  const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
-  let v = value;
-  let i = 0;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i++;
-  }
-  return `${v >= 100 || i === 0 ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`;
-}
+const percent = (v: number) => `${v.toFixed(1)}%`;
+const loadFormat = (v: number) => (v >= 10 ? v.toFixed(0) : v.toFixed(1));
+const countFormat = (v: number) => `${Math.round(v)}`;
 
 function timeSince(dateStr: string | null) {
   if (!dateStr) return 'never';
@@ -98,41 +102,25 @@ function Meter({ value, tone }: { value: number; tone: Tone }) {
   );
 }
 
-function Legend({ items }: { items: { label: string; color: string }[] }) {
-  return (
-    <div className="hidden flex-wrap items-center gap-4 sm:flex">
-      {items.map((item) => (
-        <span key={item.label} className="inline-flex items-center gap-1.5 font-mono text-[12px] text-muted-foreground">
-          <span className="h-0.5 w-3.5 rounded-full" style={{ background: item.color }} aria-hidden />
-          {item.label}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 function ChartPanel({
-  label,
   title,
   legend,
-  height,
   className,
   children,
+  readings,
 }: {
-  label: string;
   title: string;
-  legend: { label: string; color: string }[];
-  height: number;
+  legend?: ReactNode;
   className?: string;
   children: ReactNode;
+  readings?: ReactNode;
 }) {
   return (
-    <Panel label={label} title={title} actions={<Legend items={legend} />} className={className} bodyClassName="px-3 pb-3 pt-5">
-      <div style={{ height }}>
-        <ResponsiveContainer width="100%" height="100%">
-          {children as React.ReactElement}
-        </ResponsiveContainer>
-      </div>
+    <Panel title={title} className={className} flush>
+      {/* the legend sits with the chart so panel headers line up across a row */}
+      {legend && <div className="flex flex-wrap justify-end gap-x-4 gap-y-1 px-4 pt-3 sm:px-5">{legend}</div>}
+      <div className={legend ? 'px-3 pb-3 pt-2 sm:px-4' : 'px-3 pb-3 pt-4 sm:px-4'}>{children}</div>
+      {readings}
     </Panel>
   );
 }
@@ -179,7 +167,7 @@ function AnomalyPanel({ score, checked }: { score: AnomalyScore | null; checked:
         </span>
         <div>
           <p className="text-[15px] font-semibold" style={{ color: TONE_COLOR[tone] }}>
-            {score.isAnomaly ? 'Anomaly detected' : 'Normal behaviour'}
+            {score.isAnomaly ? 'Anomaly detected' : 'Normal behavior'}
           </p>
           <p className="mt-1 text-[13.5px] text-muted-foreground">
             {score.isAnomaly
@@ -221,15 +209,41 @@ function BackToServers() {
   );
 }
 
+function toRows(metrics: Metric[]): MetricRow[] {
+  return metrics.map((m) => ({
+    t: new Date(m.timestamp).getTime(),
+    cpu: m.cpuUsage,
+    mem: m.memUsage,
+    disk: m.diskUsage,
+    netIn: m.networkIn,
+    netOut: m.networkOut,
+    read: m.diskReadRate,
+    write: m.diskWriteRate,
+    processes: m.processCount,
+    load: m.loadAverage,
+  }));
+}
+
 function ServerDetailContent() {
   const params = useParams();
   const serverId = params.id as string;
+  const [range, setRange] = useState('10m');
   const [data, setData] = useState<ServerDetail | null>(null);
   const [error, setError] = useState('');
   const [anomalyScore, setAnomalyScore] = useState<AnomalyScore | null>(null);
   const [anomalyChecked, setAnomalyChecked] = useState(false);
+  const [rules, setRules] = useState<Rule[]>([]);
 
   useEffect(() => {
+    apiClient
+      .get<Rule[]>('/rules')
+      .then(setRules)
+      .catch(() => setRules([]));
+  }, []);
+
+  useEffect(() => {
+    const { limit, every } = RANGES.find((r) => r.value === range) ?? RANGES[0];
+
     function loadAnomalyScore() {
       apiClient
         .get<AnomalyScore>(`/servers/${serverId}/anomaly-score`)
@@ -240,7 +254,7 @@ function ServerDetailContent() {
 
     function loadData() {
       apiClient
-        .get<ServerDetail>(`/servers/${serverId}/metrics?limit=50`)
+        .get<ServerDetail>(`/servers/${serverId}/metrics?limit=${limit}`)
         .then(setData)
         .catch((err) => setError(err.message));
     }
@@ -250,9 +264,39 @@ function ServerDetailContent() {
     const interval = setInterval(() => {
       loadData();
       loadAnomalyScore();
-    }, 10000);
+    }, every);
     return () => clearInterval(interval);
-  }, [serverId]);
+  }, [serverId, range]);
+
+  // Active metric-threshold rules, drawn as dashed lines on the matching chart.
+  const thresholds = useMemo(() => {
+    const byKey: Record<string, Threshold[]> = {};
+    for (const r of rules) {
+      if (!r.isActive || r.ruleType !== 'METRIC_THRESHOLD' || r.threshold === null || !r.metricField) continue;
+      const key = METRIC_KEY[r.metricField];
+      if (!key) continue;
+      (byKey[key] ??= []).push({
+        name: r.name,
+        value: r.threshold,
+        severity: r.severity,
+        operator: r.operator === 'LESS_THAN' ? 'LESS_THAN' : 'GREATER_THAN',
+      });
+    }
+    return byKey;
+  }, [rules]);
+
+  // The window ends at the latest reading, so an offline server still shows
+  // its last readings, and a server that just started shows a short line.
+  const { label: rangeLabel, minutes } = RANGES.find((r) => r.value === range) ?? RANGES[0];
+  const rows = useMemo(() => {
+    const all = data ? toRows(data.metrics) : [];
+    const end = all[all.length - 1]?.t ?? 0;
+    return all.filter((r) => r.t >= end - minutes * 60_000);
+  }, [data, minutes]);
+  const chartRows = useMemo(() => withGaps(downsample(rows)) as MetricRow[], [rows]);
+  const timeWindow: [number, number] | undefined = rows.length
+    ? [rows[rows.length - 1].t - minutes * 60_000, rows[rows.length - 1].t]
+    : undefined;
 
   if (error) {
     return (
@@ -277,26 +321,12 @@ function ServerDetailContent() {
     );
   }
 
-  const chartData = data.metrics.map((m) => ({
-    time: new Date(m.timestamp).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    }),
-    CPU: m.cpuUsage,
-    Memory: m.memUsage,
-    Disk: m.diskUsage,
-    NetworkIn: m.networkIn,
-    NetworkOut: m.networkOut,
-    DiskRead: m.diskReadRate,
-    DiskWrite: m.diskWriteRate,
-    Processes: m.processCount,
-    LoadAvg: m.loadAverage,
-  }));
-
   const latest = data.metrics[data.metrics.length - 1];
   const { server } = data;
+  const latestRate = (key: 'netIn' | 'netOut' | 'read' | 'write') => {
+    const v = lastValue(rows, key);
+    return v === null ? undefined : formatRate(v);
+  };
 
   return (
     <AppShell
@@ -351,97 +381,123 @@ function ServerDetailContent() {
             />
           </div>
 
+          {/* one time range for every chart below */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-[13.5px] text-muted-foreground">
+              {rows.length > 1 ? `Charts show the last ${rangeLabel} of readings.` : 'Charts fill in as readings arrive.'}
+            </p>
+            <FilterTabs label="Time range" value={range} onValueChange={setRange} tabs={RANGES} />
+          </div>
+
           <div className="grid gap-6 xl:grid-cols-3">
             <ChartPanel
-              className="xl:col-span-2"
-              label="Last 50 readings"
-              title="Resource usage"
-              height={260}
-              legend={[
-                { label: 'CPU', color: SERIES.cpu },
-                { label: 'Memory', color: SERIES.memory },
-                { label: 'Disk', color: SERIES.disk },
-              ]}
+              className="min-w-0 xl:col-span-2"
+              title="CPU, memory and disk"
+              readings={
+                <ChartReadings
+                  rows={rows}
+                  caption="Latest CPU, memory and disk readings"
+                  columns={[
+                    { key: 'cpu', label: 'CPU', format: percent },
+                    { key: 'mem', label: 'Memory', format: percent },
+                    { key: 'disk', label: 'Disk', format: percent },
+                  ]}
+                />
+              }
             >
-              <LineChart data={chartData} margin={{ top: 4, right: 28, bottom: 0, left: -12 }}>
-                <CartesianGrid {...gridProps} />
-                <XAxis dataKey="time" {...axisProps} minTickGap={48} />
-                <YAxis domain={[0, 100]} unit="%" {...axisProps} width={48} />
-                <Tooltip {...tooltipProps} formatter={(v) => `${Number(v).toFixed(1)}%`} />
-                <Line type="monotone" dataKey="CPU" stroke={SERIES.cpu} strokeWidth={2} dot={false} isAnimationActive={false} />
-                <Line type="monotone" dataKey="Memory" stroke={SERIES.memory} strokeWidth={2} dot={false} isAnimationActive={false} />
-                <Line type="monotone" dataKey="Disk" stroke={SERIES.disk} strokeWidth={2} dot={false} isAnimationActive={false} />
-              </LineChart>
+              <UsageCharts rows={chartRows} thresholds={thresholds} timeWindow={timeWindow} />
             </ChartPanel>
             <AnomalyPanel score={anomalyScore} checked={anomalyChecked} />
           </div>
 
           <ChartPanel
-            label="Network"
-            title="Throughput"
-            height={220}
-            legend={[
-              { label: 'In', color: SERIES.netIn },
-              { label: 'Out', color: SERIES.netOut },
-            ]}
+            title="Network"
+            className="min-w-0"
+            legend={
+              <>
+                <LegendKey color={chartColors.series[0]} label="In" value={latestRate('netIn')} />
+                <LegendKey color={chartColors.series[1]} label="Out" value={latestRate('netOut')} />
+              </>
+            }
+            readings={
+              <ChartReadings
+                rows={rows}
+                caption="Latest network readings"
+                columns={[
+                  { key: 'netIn', label: 'In', format: formatRate },
+                  { key: 'netOut', label: 'Out', format: formatRate },
+                ]}
+              />
+            }
           >
-            <AreaChart data={chartData} margin={{ top: 4, right: 28, bottom: 0, left: 4 }}>
-              <defs>
-                <linearGradient id="net-in" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={SERIES.netIn} stopOpacity={0.28} />
-                  <stop offset="100%" stopColor={SERIES.netIn} stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="net-out" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={SERIES.netOut} stopOpacity={0.22} />
-                  <stop offset="100%" stopColor={SERIES.netOut} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid {...gridProps} />
-              <XAxis dataKey="time" {...axisProps} minTickGap={48} />
-              <YAxis {...axisProps} width={72} tickFormatter={(v) => formatRate(Number(v))} />
-              <Tooltip {...tooltipProps} formatter={(v) => formatRate(Number(v))} />
-              <Area type="monotone" dataKey="NetworkIn" name="In" stroke={SERIES.netIn} strokeWidth={2} fill="url(#net-in)" connectNulls isAnimationActive={false} />
-              <Area type="monotone" dataKey="NetworkOut" name="Out" stroke={SERIES.netOut} strokeWidth={2} fill="url(#net-out)" connectNulls isAnimationActive={false} />
-            </AreaChart>
+            <RateChart
+              rows={chartRows}
+              timeWindow={timeWindow}
+              height={220}
+              series={[
+                { key: 'netIn', label: 'In' },
+                { key: 'netOut', label: 'Out' },
+              ]}
+              thresholds={[...(thresholds.netIn ?? []), ...(thresholds.netOut ?? [])]}
+            />
           </ChartPanel>
 
-          <div className="grid gap-6 xl:grid-cols-2">
+          <div className="grid gap-6 lg:grid-cols-3">
             <ChartPanel
-              label="Storage"
-              title="Disk I/O"
-              height={200}
-              legend={[
-                { label: 'Read', color: SERIES.read },
-                { label: 'Write', color: SERIES.write },
-              ]}
+              title="Disk activity"
+              className="min-w-0"
+              legend={
+                <>
+                  <LegendKey color={chartColors.series[0]} label="Read" value={latestRate('read')} />
+                  <LegendKey color={chartColors.series[1]} label="Write" value={latestRate('write')} />
+                </>
+              }
+              readings={
+                <ChartReadings
+                  rows={rows}
+                  caption="Latest disk activity readings"
+                  columns={[
+                    { key: 'read', label: 'Read', format: formatRate },
+                    { key: 'write', label: 'Write', format: formatRate },
+                  ]}
+                />
+              }
             >
-              <LineChart data={chartData} margin={{ top: 4, right: 28, bottom: 0, left: 4 }}>
-                <CartesianGrid {...gridProps} />
-                <XAxis dataKey="time" {...axisProps} minTickGap={48} />
-                <YAxis {...axisProps} width={72} tickFormatter={(v) => formatRate(Number(v))} />
-                <Tooltip {...tooltipProps} formatter={(v) => formatRate(Number(v))} />
-                <Line type="monotone" dataKey="DiskRead" name="Read" stroke={SERIES.read} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-                <Line type="monotone" dataKey="DiskWrite" name="Write" stroke={SERIES.write} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-              </LineChart>
+              <RateChart
+                rows={chartRows}
+                timeWindow={timeWindow}
+                series={[
+                  { key: 'read', label: 'Read' },
+                  { key: 'write', label: 'Write' },
+                ]}
+                thresholds={[...(thresholds.read ?? []), ...(thresholds.write ?? [])]}
+              />
             </ChartPanel>
             <ChartPanel
-              label="System"
-              title="Processes and load"
-              height={200}
-              legend={[
-                { label: 'Processes', color: SERIES.processes },
-                { label: 'Load', color: SERIES.load },
-              ]}
+              title="Load average"
+              className="min-w-0"
+              readings={
+                <ChartReadings rows={rows} caption="Latest load average readings" columns={[{ key: 'load', label: 'Load', format: (v) => v.toFixed(2) }]} />
+              }
             >
-              <LineChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -12 }}>
-                <CartesianGrid {...gridProps} />
-                <XAxis dataKey="time" {...axisProps} minTickGap={48} />
-                <YAxis yAxisId="processes" {...axisProps} width={48} />
-                <YAxis yAxisId="load" orientation="right" {...axisProps} width={40} />
-                <Tooltip {...tooltipProps} />
-                <Line yAxisId="processes" type="monotone" dataKey="Processes" stroke={SERIES.processes} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-                <Line yAxisId="load" type="monotone" dataKey="LoadAvg" name="Load" stroke={SERIES.load} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-              </LineChart>
+              <SingleChart rows={chartRows} timeWindow={timeWindow} dataKey="load" label="Load" format={loadFormat} thresholds={thresholds.load} height={200} />
+            </ChartPanel>
+            <ChartPanel
+              title="Processes"
+              className="min-w-0"
+              readings={
+                <ChartReadings rows={rows} caption="Latest process counts" columns={[{ key: 'processes', label: 'Processes', format: countFormat }]} />
+              }
+            >
+              <SingleChart
+                rows={chartRows}
+                timeWindow={timeWindow}
+                dataKey="processes"
+                label="Processes"
+                format={countFormat}
+                thresholds={thresholds.processes}
+                height={200}
+              />
             </ChartPanel>
           </div>
         </div>
