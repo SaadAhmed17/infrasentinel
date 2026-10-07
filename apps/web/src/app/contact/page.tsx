@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
-import { ArrowUpRight, CircleDot, Clock, GitBranch, GraduationCap } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowUpRight, CircleDot, Clock, GitBranch } from 'lucide-react';
 import { PublicPageHeader, PublicShell } from '@/components/public-shell';
 
 export const metadata: Metadata = {
@@ -26,21 +27,6 @@ const CHANNELS = [
   },
 ];
 
-const TEAM = [
-  { name: 'Farhan', role: 'Frontend and dashboard' },
-  { name: 'Saad Ahmed', role: 'Backend and SIEM engine' },
-  { name: 'Hashim Ahmed Khan', role: 'AI and anomaly detection' },
-];
-
-function initials(name: string) {
-  return name
-    .split(' ')
-    .map((word) => word[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
-}
-
 export default function ContactPage() {
   return (
     <PublicShell>
@@ -57,14 +43,14 @@ export default function ContactPage() {
               href={href}
               target="_blank"
               rel="noopener noreferrer"
-              className="group flex flex-col rounded-xl border border-border bg-card p-6 shadow-panel transition-colors hover:border-primary/40"
+              className="group flex flex-col rounded-xl border border-border bg-card p-6 shadow-[var(--shadow-panel)] transition-colors hover:border-primary/40"
             >
               <span className="flex size-10 items-center justify-center rounded-lg border border-primary/25 bg-primary/10 text-primary-bright">
                 <Icon className="size-5" strokeWidth={1.8} />
               </span>
               <h2 className="mt-5 text-[17px] font-semibold text-foreground">{title}</h2>
               <p className="mt-2 text-[14px] leading-relaxed text-muted-foreground">{text}</p>
-              <span className="mt-5 inline-flex items-center gap-1.5 break-all font-mono text-[13px] font-medium text-primary-bright">
+              <span className="mt-5 inline-flex items-center gap-1.5 break-all text-[14px] font-semibold text-primary">
                 {linkLabel}
                 <ArrowUpRight className="size-3.5 shrink-0 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" aria-hidden />
               </span>
@@ -76,36 +62,15 @@ export default function ContactPage() {
           <Clock className="size-4 shrink-0" strokeWidth={1.8} aria-hidden />
           This is a student project, so replies may be slower during exam periods.
         </p>
+        <p className="mt-8 text-[14.5px] text-muted-foreground">
+          The project team and supervisor are listed on the{' '}
+          <Link href="/about#team" className="font-semibold text-primary underline-offset-4 hover:underline">
+            About page
+          </Link>
+          .
+        </p>
       </section>
 
-      <section className="border-t border-border bg-surface/55 backdrop-blur-sm">
-        <div className="mx-auto max-w-7xl px-6 py-16 lg:px-10 lg:py-20">
-          <p className="hud-label">People</p>
-          <h2 className="mt-4 font-display text-[30px] font-semibold leading-tight tracking-[-0.03em] text-foreground sm:text-[36px]">
-            Project team
-          </h2>
-          <ul className="mt-10 grid gap-5 sm:grid-cols-3">
-            {TEAM.map((member) => (
-              <li key={member.name} className="flex items-center gap-4 rounded-xl border border-border bg-card p-5">
-                <span
-                  className="flex size-12 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/12 font-mono text-[15px] font-semibold text-primary-bright"
-                  aria-hidden
-                >
-                  {initials(member.name)}
-                </span>
-                <div>
-                  <p className="text-[15px] font-semibold text-foreground">{member.name}</p>
-                  <p className="mt-0.5 text-[13.5px] text-muted-foreground">{member.role}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-8 flex items-center gap-2 text-[13.5px] text-muted-foreground">
-            <GraduationCap className="size-4 shrink-0" strokeWidth={1.8} aria-hidden />
-            Supervised by Dr. Quratulain Zahid
-          </p>
-        </div>
-      </section>
     </PublicShell>
   );
 }

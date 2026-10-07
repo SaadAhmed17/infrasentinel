@@ -80,11 +80,11 @@ See `apps/api/.env.example`, `apps/web/.env.local` (create from example), `apps/
 
 | Name | Role |
 |---|---|
-| Saad Ahmed | AI & Backend |
-| Hashim Ahmed Khan | Backend & Monitoring Agents |
-| Farhan Ali | Frontend |
+| Saad Ahmed | Backend and SIEM engine (team lead) |
+| Farhan Ali | Frontend and dashboard |
+| Hashim Ahmed Khan | Quality assurance, security and UI design |
 
-Supervised by Ms. Quratulain Zahid, Air University Islamabad.
+Supervised by Dr. Quratulain Zahid, Air University Islamabad.
 
 ## Documentation
 
