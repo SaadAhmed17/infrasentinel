@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 // HUD-style corner brackets, drawn just outside a panel's corners.
+// Used on at most one key panel per page.
 export function CornerBrackets({ className }: { className?: string }) {
   const corner = 'pointer-events-none absolute size-2.5 border-hud/60';
   return (
@@ -17,45 +18,56 @@ export function CornerBrackets({ className }: { className?: string }) {
 export function Panel({
   label,
   title,
+  meta,
   actions,
   brackets = false,
+  flush = false,
   className,
   bodyClassName,
   children,
+  id,
 }: {
-  /** Small uppercase label above the title. */
+  /** Old small label above the title; pages are moving away from it. */
   label?: string;
   title?: ReactNode;
+  /** Short text next to the title, e.g. "6 members". */
+  meta?: ReactNode;
   actions?: ReactNode;
-  /** Corner brackets — reserve for the one or two key panels on a page. */
+  /** Corner brackets: only on the one key panel of a page. */
   brackets?: boolean;
+  /** No padding around the body, for tables and lists. */
+  flush?: boolean;
   className?: string;
   bodyClassName?: string;
   children?: ReactNode;
+  id?: string;
 }) {
-  const hasHeader = label || title || actions;
+  const hasHeader = label || title || actions || meta;
   return (
     <section
+      id={id}
       className={cn(
-        'relative rounded-xl border border-border bg-card/90 text-card-foreground shadow-[var(--shadow-panel)] backdrop-blur-[2px]',
+        'relative rounded-xl border border-border bg-card text-card-foreground shadow-[var(--shadow-panel)]',
         className,
       )}
     >
       {brackets && <CornerBrackets />}
       {hasHeader && (
-        <header className="flex min-h-14 items-center justify-between gap-3 border-b border-border px-5 py-3">
+        <header className="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 sm:px-5">
           <div className="min-w-0">
-            {label && <p className="hud-label">{label}</p>}
+            {label && <p className="text-label">{label}</p>}
             {title && (
-              <h2 className={cn('truncate text-[15px] font-semibold tracking-tight text-foreground', label && 'mt-0.5')}>
+              <h2 className={cn('text-[15px] font-semibold tracking-[-0.005em] text-foreground', label && 'mt-0.5')}>
                 {title}
+                {meta && <span className="ml-2 text-[13px] font-normal text-muted-foreground">{meta}</span>}
               </h2>
             )}
           </div>
           {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
         </header>
       )}
-      <div className={cn('p-5', bodyClassName)}>{children}</div>
+      {/* responsive padding only when the page doesn't set its own */}
+      <div className={cn(flush ? '' : bodyClassName ? 'p-5' : 'p-4 sm:p-5', bodyClassName)}>{children}</div>
     </section>
   );
 }

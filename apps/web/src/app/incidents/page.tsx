@@ -224,7 +224,7 @@ function IncidentsContent() {
           ))}
         </div>
       ) : shown.length === 0 ? (
-        <Panel bodyClassName="p-0">
+        <Panel flush>
           <EmptyState
             art="incidents"
             title={incidents.length === 0 ? 'No incidents yet' : 'Nothing here'}

@@ -588,7 +588,7 @@ function RulesContent() {
                 ? 'No rules configured yet'
                 : `${activeCount} of ${rules.length} rules active`
           }
-          bodyClassName="p-0"
+          flush
         >
           {!loaded ? (
             <div className="space-y-3 p-5">

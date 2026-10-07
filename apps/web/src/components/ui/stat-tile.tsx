@@ -22,7 +22,7 @@ export function StatTile({
   return (
     <div
       className={cn(
-        'group relative overflow-hidden rounded-xl border border-border bg-card/90 p-5 shadow-[var(--shadow-panel)] backdrop-blur-[2px]',
+        'group relative overflow-hidden rounded-xl border border-border bg-card p-5 shadow-[var(--shadow-panel)]',
         className,
       )}
     >
@@ -32,7 +32,7 @@ export function StatTile({
         <p className="hud-label">{label}</p>
         {Icon && <Icon className="size-4 shrink-0" style={{ color }} strokeWidth={1.9} aria-hidden />}
       </div>
-      <p className="mt-4 font-display text-[30px] font-semibold leading-none tracking-[-0.03em] text-foreground tabular-nums">
+      <p className="mt-3 text-[28px] font-semibold leading-none tracking-[-0.01em] text-foreground">
         {value}
       </p>
       {hint && <div className="mt-2.5 text-[13px] text-muted-foreground">{hint}</div>}

@@ -123,7 +123,7 @@ export function AppShell({
 
   return (
     <div className="relative min-h-screen">
-      <AppBackground />
+      <AppBackground intensity="plain" />
 
       <aside
         className={cn(

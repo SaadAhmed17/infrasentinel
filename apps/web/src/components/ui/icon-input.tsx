@@ -33,7 +33,7 @@ export function PasswordVisibilityToggle({ visible, onToggle }: { visible: boole
       onClick={onToggle}
       aria-label={label}
       title={label}
-      className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground pointer-coarse:size-10"
     >
       <Icon className="size-4" strokeWidth={1.75} />
     </button>

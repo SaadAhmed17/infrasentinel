@@ -1,16 +1,15 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Silkscreen, Unbounded } from "next/font/google";
+import { Geist, Geist_Mono, Unbounded } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/auth-context";
+import { Providers } from "@/components/providers";
 
-// Body and UI text
+// Body and UI text, including numbers
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
-// Labels, IDs, timestamps, metric values
+// Machine data only: hostnames, IPs, keys, commands, raw values
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" });
-// Display: page titles and big numbers
+// Display: page titles and the home page hero
 const unbounded = Unbounded({ subsets: ["latin"], variable: "--font-unbounded" });
-// Pixel accent, used sparingly
-const silkscreen = Silkscreen({ subsets: ["latin"], weight: "400", variable: "--font-silkscreen" });
 
 export const metadata: Metadata = {
   // pages set their own title, e.g. "Servers | InfraSentinel"
@@ -34,7 +33,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geist.variable} ${geistMono.variable} ${unbounded.variable} ${silkscreen.variable}`}
+      className={`${geist.variable} ${geistMono.variable} ${unbounded.variable}`}
     >
       <body>
         <script
@@ -42,7 +41,9 @@ export default function RootLayout({
             __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})()`,
           }}
         />
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <Providers>{children}</Providers>
+        </AuthProvider>
       </body>
     </html>
   );

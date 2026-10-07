@@ -224,7 +224,7 @@ function DashboardContent() {
           className="min-w-0 xl:col-span-2"
           label="Detections"
           title="Recent alerts"
-          bodyClassName="p-0"
+          flush
           actions={
             <Link href="/incidents" className={buttonVariants({ variant: 'ghost', size: 'sm' })} aria-label="View incidents">
               <span className="hidden sm:inline">View incidents</span>
@@ -316,7 +316,7 @@ function DashboardContent() {
       <Panel
         label="Team"
         title="Organization members"
-        bodyClassName="p-0"
+        flush
         actions={
           canManageMembers && (
             <Button size="sm" variant={showInviteForm ? 'outline' : 'default'} onClick={() => setShowInviteForm(!showInviteForm)}>

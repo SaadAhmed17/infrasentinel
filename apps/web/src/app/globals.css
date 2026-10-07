@@ -18,7 +18,6 @@
   --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", monospace;
   --font-display: var(--font-unbounded), var(--font-geist), ui-sans-serif, sans-serif;
   --font-heading: var(--font-display);
-  --font-pixel: var(--font-silkscreen), var(--font-geist-mono), monospace;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -59,6 +58,7 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-chart-grid: var(--chart-grid);
 
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
@@ -79,14 +79,15 @@
 }
 
 @theme {
-  --animate-fade-up: fade-up 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  --ease-out-soft: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --animate-fade-up: fade-up 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   --animate-rack-blink: rack-blink 1.4s ease-in-out infinite;
   --animate-status-ping: status-ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
 
   @keyframes fade-up {
     from {
       opacity: 0;
-      transform: translateY(6px);
+      transform: translateY(4px);
     }
     to {
       opacity: 1;
@@ -138,13 +139,15 @@
   --destructive: #b8123a;
   --border: rgb(11 23 36 / 0.12);
   --border-strong: rgb(11 23 36 / 0.26);
-  --input: rgb(11 23 36 / 0.2);
+  /* form field outlines: >= 3:1 against their background (WCAG 1.4.11) */
+  --input: rgb(11 23 36 / 0.46);
   --ring: #0a736c;
 
   --surface: #f7f9fa;
   --surface-2: #ffffff;
   --surface-3: #dde5e9;
-  --hud: #2f4fe0;
+  /* corner brackets on the one key panel of a page: teal ink, not blue */
+  --hud: #0a736c;
 
   /* text colours checked at ≥ 5:1 on their own tinted badge background */
   --sev-critical: #b8123a;
@@ -155,11 +158,13 @@
   --status-offline: #b8123a;
   --status-unknown: #556275;
 
-  --chart-1: #0a736c;
-  --chart-2: #2f4fe0;
+  /* chart series, checked with the dataviz validator (chroma, lightness band, colour-blind separation, 3:1) */
+  --chart-1: #018e7d;
+  --chart-2: #3b5bd4;
   --chart-3: #c2410c;
   --chart-4: #7c3aed;
   --chart-5: #a16207;
+  --chart-grid: rgb(11 23 36 / 0.08);
 
   --sidebar: #f1f4f6;
   --sidebar-foreground: #0b1724;
@@ -180,7 +185,7 @@
 
   --grid-line: rgb(11 23 36 / 0.045);
   --grid-line-major: rgb(47 79 224 / 0.08);
-  --shadow-panel: 0 1px 0 rgb(11 23 36 / 0.04), 0 10px 30px -18px rgb(11 23 36 / 0.25);
+  --shadow-panel: 0 1px 2px rgb(11 23 36 / 0.05);
 
   /* pixel skyline on the sign-in pages: an ink print on blueprint paper */
   --scene-star: rgb(47 79 224 / 0.35);
@@ -220,7 +225,7 @@
   --destructive: #ff4d6d;
   --border: rgb(148 178 204 / 0.11);
   --border-strong: rgb(148 178 204 / 0.22);
-  --input: rgb(148 178 204 / 0.16);
+  --input: rgb(148 178 204 / 0.5);
   --ring: #4fd6cb;
 
   --surface: #0d1520;
@@ -236,11 +241,12 @@
   --status-offline: #ff4d6d;
   --status-unknown: #7c8fa3;
 
-  --chart-1: #4fd6cb;
-  --chart-2: #6c8cff;
+  --chart-1: #06a89d;
+  --chart-2: #6082e9;
   --chart-3: #ff8f3f;
   --chart-4: #b18cff;
   --chart-5: #f2c14e;
+  --chart-grid: rgb(148 178 204 / 0.09);
 
   --sidebar: #0a111a;
   --sidebar-foreground: #e6eef3;
@@ -301,6 +307,9 @@
   h3 {
     text-wrap: balance;
   }
+  p {
+    text-wrap: pretty;
+  }
   ::selection {
     background: color-mix(in srgb, var(--primary) 28%, transparent);
   }
@@ -314,13 +323,23 @@
   }
 }
 
-/* Small uppercase mono label used for eyebrows, column heads and panel labels. */
-@utility hud-label {
-  font-family: var(--font-mono);
-  font-size: 11px;
+/* Small label for field labels, column heads and captions. Sentence case. */
+@utility text-label {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  line-height: 1.3;
   font-weight: 500;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  color: var(--muted-foreground);
+}
+
+/* Old name of text-label, kept until every page has moved over. */
+@utility hud-label {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  line-height: 1.3;
+  font-weight: 500;
+  letter-spacing: 0;
   color: var(--muted-foreground);
 }
 
@@ -374,6 +393,14 @@
   filter: blur(30px);
   animation: aurora-drift 40s ease-in-out infinite alternate;
 }
+.app-backdrop--plain .app-backdrop__grid {
+  display: none;
+}
+.dark .app-backdrop--plain .app-backdrop__aurora {
+  inset: -20% -20% auto;
+  height: 60vh;
+  opacity: 0.5;
+}
 .dark .app-backdrop--bold .app-backdrop__aurora {
   background:
     radial-gradient(42% 38% at 20% 14%, rgb(44 179 170 / 0.32), transparent 70%),
@@ -398,5 +425,14 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+  /* blinking lights, pings and the aurora stay still (lights steady on) */
+  .animate-rack-blink,
+  .animate-status-ping,
+  .app-backdrop__aurora {
+    animation: none !important;
+  }
+  .animate-status-ping {
+    display: none;
   }
 }

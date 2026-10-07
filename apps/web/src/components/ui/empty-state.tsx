@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export type PixelArtName = 'server' | 'shield' | 'rules' | 'incidents' | 'chat';
@@ -119,27 +120,43 @@ export function PixelArt({ name, className }: { name: PixelArtName; className?: 
   );
 }
 
+const TONE_STYLE = {
+  default: 'bg-surface-3/70 text-muted-foreground',
+  positive: 'bg-status-online/12 text-status-online',
+  error: 'bg-destructive/10 text-destructive',
+};
+
+/**
+ * Empty, positive ("all clear") and error states. Error and empty are never the
+ * same screen: an error says what failed and how to retry.
+ */
 export function EmptyState({
   art,
+  icon: Icon,
+  tone = 'default',
   title,
   description,
   action,
   className,
 }: {
-  art: PixelArtName;
+  art?: PixelArtName;
+  icon?: LucideIcon;
+  tone?: keyof typeof TONE_STYLE;
   title: string;
   description?: ReactNode;
   action?: ReactNode;
   className?: string;
 }) {
   return (
-    <div className={cn('flex flex-col items-center justify-center px-6 py-14 text-center', className)}>
-      <div className="relative mb-5 flex size-20 items-center justify-center rounded-xl border border-dashed border-border-strong bg-surface-2/60">
-        <PixelArt name={art} className="size-12 opacity-90" />
-      </div>
-      <p className="text-[16px] font-semibold tracking-tight text-foreground">{title}</p>
-      {description && <p className="mt-1.5 max-w-sm text-[14px] text-muted-foreground">{description}</p>}
-      {action && <div className="mt-5">{action}</div>}
+    <div className={cn('flex flex-col items-center justify-center px-6 py-12 text-center', className)}>
+      {(art || Icon) && (
+        <div className={cn('mb-4 flex size-16 items-center justify-center rounded-2xl', TONE_STYLE[tone])}>
+          {art ? <PixelArt name={art} className="size-11" /> : Icon && <Icon className="size-7" strokeWidth={1.75} aria-hidden />}
+        </div>
+      )}
+      <p className="text-[15px] font-semibold text-foreground">{title}</p>
+      {description && <p className="mt-1.5 max-w-sm text-[14px] leading-relaxed text-muted-foreground">{description}</p>}
+      {action && <div className="mt-5 flex flex-wrap justify-center gap-2">{action}</div>}
     </div>
   );
 }

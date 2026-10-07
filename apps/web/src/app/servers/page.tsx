@@ -207,7 +207,7 @@ function ServersContent({
               ? 'No servers registered yet'
               : `${counts.online} of ${servers.length} servers online`
         }
-        bodyClassName="p-0"
+        flush
         actions={
           servers.length > 0 && (
             <div className="hidden items-center gap-4 font-mono text-[12px] text-muted-foreground sm:flex">

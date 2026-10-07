@@ -19,10 +19,10 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <div className="relative flex min-h-screen items-center justify-center" role="status">
-        <AppBackground />
+        <AppBackground intensity="plain" />
         <div className="relative z-10 flex flex-col items-center gap-4">
           <LogoMark className="w-10" blink title="Loading" />
-          <p className="hud-label">Loading workspace</p>
+          <p className="text-[13px] font-medium text-muted-foreground">Loading</p>
         </div>
       </div>
     );

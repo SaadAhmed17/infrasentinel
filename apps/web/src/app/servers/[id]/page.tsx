@@ -311,7 +311,7 @@ function ServerDetailContent() {
       actions={<BackToServers />}
     >
       {data.metrics.length === 0 ? (
-        <Panel bodyClassName="p-0">
+        <Panel flush>
           <EmptyState
             art="server"
             title="No metrics yet"
