@@ -1,672 +1,342 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Pencil, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import { AlertCircle, Ellipsis, Pencil, Plus, Trash2 } from 'lucide-react';
+import { useAuth } from '@/contexts/auth-context';
 import { ProtectedRoute } from '@/components/protected-route';
 import { AppShell } from '@/components/app-shell';
-import { apiClient } from '@/lib/api-client';
-import { canManageSecurity } from '@/lib/permissions';
-import { useAuth } from '@/contexts/auth-context';
+import { RuleForm, TemplateCard } from '@/components/rules/rule-form';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EmptyState } from '@/components/ui/empty-state';
-import { fieldControlClass, fieldHintClass, fieldLabelClass, fieldSelectClass } from '@/components/ui/form-styles';
-import { Notice } from '@/components/ui/notice';
+import { DropdownMenu, MenuItem, MenuSeparator } from '@/components/ui/menu';
 import { Panel } from '@/components/ui/panel';
+import { SkeletonRows } from '@/components/ui/skeleton';
 import { SeverityBadge } from '@/components/ui/status';
 import { Switch } from '@/components/ui/switch';
+import { useToast } from '@/components/ui/toast';
+import { apiClient } from '@/lib/api-client';
+import { friendlyError } from '@/lib/errors';
+import { canManageSecurity } from '@/lib/permissions';
+import { RULE_TYPES, byRuleOrder, describeCondition, labelOf, type Rule } from '@/lib/rule-format';
+import { RULE_TEMPLATES, templatePayload } from '@/lib/rule-templates';
+import { cn } from '@/lib/utils';
 
-interface Rule {
-  id: string;
-  name: string;
-  ruleType: string;
-  metricField: string | null;
-  operator: string | null;
-  threshold: number | null;
-  durationSeconds: number;
-  eventType: string | null;
-  groupByField: string | null;
-  maxCount: number | null;
-  windowSeconds: number | null;
-  approvedUsernames: string | null;
-  businessHourStartUTC: number | null;
-  businessHourEndUTC: number | null;
-  severity: string;
-  isActive: boolean;
+function RuleMenu({ rule, onEdit, onDelete }: { rule: Rule; onEdit: () => void; onDelete: () => void }) {
+  return (
+    <DropdownMenu
+      trigger={
+        <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${rule.name}`}>
+          <Ellipsis />
+        </Button>
+      }
+    >
+      <MenuItem icon={Pencil} onClick={onEdit}>
+        Edit
+      </MenuItem>
+      <MenuSeparator />
+      <MenuItem icon={Trash2} onClick={onDelete} destructive>
+        Delete rule
+      </MenuItem>
+    </DropdownMenu>
+  );
 }
 
-const RULE_TYPES = [
-  {
-    value: 'METRIC_THRESHOLD',
-    label: 'Metric threshold',
-    hint: 'Fires when a metric stays above or below a value for the whole duration, e.g. high CPU.',
-  },
-  {
-    value: 'EVENT_FREQUENCY',
-    label: 'Event frequency',
-    hint: 'Fires when one IP, user or server produces too many events in a time window, e.g. brute-force logins.',
-  },
-  {
-    value: 'HEARTBEAT_MISSING',
-    label: 'Heartbeat missing',
-    hint: 'Fires when a server stops reporting, e.g. after a crash.',
-  },
-  {
-    value: 'CREDENTIAL_STUFFING',
-    label: 'Credential stuffing',
-    hint: 'Fires when an account fails to log in from several IP addresses and then succeeds.',
-  },
-  {
-    value: 'ANOMALY_DETECTION',
-    label: 'Anomaly detection',
-    hint: "Fires when a server's LSTM model sees behaviour it did not learn as normal.",
-  },
-  {
-    value: 'UNUSUAL_ACCESS',
-    label: 'Unusual access',
-    hint: 'Fires on sudo by users who are not approved, or outside business hours.',
-  },
-];
-
-const METRIC_FIELDS = [
-  { value: 'CPU_USAGE', label: 'CPU usage (%)' },
-  { value: 'MEM_USAGE', label: 'Memory usage (%)' },
-  { value: 'DISK_USAGE', label: 'Disk usage (%)' },
-  { value: 'NETWORK_IN', label: 'Network in (bytes/s)' },
-  { value: 'NETWORK_OUT', label: 'Network out (bytes/s)' },
-  { value: 'DISK_READ_RATE', label: 'Disk read rate (bytes/s)' },
-  { value: 'DISK_WRITE_RATE', label: 'Disk write rate (bytes/s)' },
-  { value: 'PROCESS_COUNT', label: 'Process count' },
-  { value: 'LOAD_AVERAGE', label: 'Load average' },
-];
-
-// The event types the platform records and the fields they carry; the API
-// rejects anything else (KNOWN_EVENT_TYPES / GROUPABLE_EVENT_FIELDS in rule-config.ts).
-const EVENT_TYPES = [
-  { value: 'AUTH_LOGIN_FAILURE', label: 'Web login failed' },
-  { value: 'AUTH_LOGIN_SUCCESS', label: 'Web login succeeded' },
-  { value: 'SSH_LOGIN_FAILURE', label: 'SSH login failed' },
-  { value: 'SSH_LOGIN_SUCCESS', label: 'SSH login succeeded' },
-  { value: 'SUDO_COMMAND', label: 'Sudo command' },
-  { value: 'API_REQUEST', label: 'API request' },
-  { value: 'AUTH_PASSWORD_RESET_REQUESTED', label: 'Password reset requested' },
-  { value: 'AUTH_PASSWORD_RESET_COMPLETED', label: 'Password reset completed' },
-];
-
-const GROUP_BY_FIELDS = [
-  { value: 'ipAddress', label: 'IP address' },
-  { value: 'email', label: 'E-mail (web logins)' },
-  { value: 'username', label: 'Username (SSH)' },
-  { value: 'serverId', label: 'Server (SSH)' },
-];
-
-// How each event type and group-by field reads inside a sentence.
-const EVENT_PHRASES: Record<string, string> = {
-  AUTH_LOGIN_FAILURE: 'failed web logins',
-  AUTH_LOGIN_SUCCESS: 'web logins',
-  SSH_LOGIN_FAILURE: 'failed SSH logins',
-  SSH_LOGIN_SUCCESS: 'SSH logins',
-  SUDO_COMMAND: 'sudo commands',
-  API_REQUEST: 'API requests',
-  AUTH_PASSWORD_RESET_REQUESTED: 'password reset requests',
-  AUTH_PASSWORD_RESET_COMPLETED: 'completed password resets',
-};
-const GROUP_PHRASES: Record<string, string> = {
-  ipAddress: 'one IP address',
-  email: 'one e-mail address',
-  username: 'one username',
-  serverId: 'one server',
-};
-
-const PRESETS = [
-  { label: 'SSH Brute-Force', ruleType: 'EVENT_FREQUENCY', eventType: 'SSH_LOGIN_FAILURE', groupByField: 'ipAddress', maxCount: '5', windowSeconds: '60', severity: 'CRITICAL' },
-  { label: 'Web Login Brute-Force', ruleType: 'EVENT_FREQUENCY', eventType: 'AUTH_LOGIN_FAILURE', groupByField: 'ipAddress', maxCount: '10', windowSeconds: '300', severity: 'HIGH' },
-  { label: 'High CPU', ruleType: 'METRIC_THRESHOLD', metricField: 'CPU_USAGE', operator: 'GREATER_THAN', threshold: '85', durationSeconds: '60', severity: 'HIGH' },
-  { label: 'Service Crash', ruleType: 'HEARTBEAT_MISSING', durationSeconds: '30', severity: 'CRITICAL' },
-  { label: 'API Flood', ruleType: 'EVENT_FREQUENCY', eventType: 'API_REQUEST', groupByField: 'ipAddress', maxCount: '100', windowSeconds: '60', severity: 'HIGH' },
-  { label: 'Off-Hours Root Access', ruleType: 'UNUSUAL_ACCESS', businessHourStart: '9', businessHourEnd: '18', severity: 'HIGH' },
-];
-
-// Keeps a value that is no longer in the list (e.g. an older rule) selectable.
-function withCurrent(options: { value: string; label: string }[], current: string) {
-  return options.some((o) => o.value === current) ? options : [...options, { value: current, label: current }];
-}
-
-function labelOf(options: { value: string; label: string }[], value: string | null) {
-  return options.find((o) => o.value === value)?.label ?? value ?? '?';
-}
-
-function hour(h: number | null) {
-  return `${String(h ?? 0).padStart(2, '0')}:00`;
-}
-
-// The rule's condition in plain words.
-function describeCondition(r: Rule) {
-  switch (r.ruleType) {
-    case 'METRIC_THRESHOLD': {
-      const metric = labelOf(METRIC_FIELDS, r.metricField).replace(/ \(.*\)$/, '');
-      const unit = r.metricField?.endsWith('_USAGE') ? '%' : '';
-      const direction = r.operator === 'GREATER_THAN' ? 'above' : 'below';
-      return `${metric} ${direction} ${r.threshold}${unit} for ${r.durationSeconds} s`;
-    }
-    case 'EVENT_FREQUENCY': {
-      const events = EVENT_PHRASES[r.eventType ?? ''] ?? `${r.eventType} events`;
-      const group = GROUP_PHRASES[r.groupByField ?? ''] ?? `one ${r.groupByField}`;
-      return `${r.maxCount}+ ${events} from ${group} within ${r.windowSeconds} s`;
-    }
-    case 'HEARTBEAT_MISSING':
-      return `No report for ${r.durationSeconds} s`;
-    case 'CREDENTIAL_STUFFING':
-      return `Failed logins from ${r.maxCount}+ IP addresses, then a success, within ${r.windowSeconds} s`;
-    case 'ANOMALY_DETECTION':
-      return "LSTM error above the server's threshold";
-    case 'UNUSUAL_ACCESS':
-      return [
-        r.approvedUsernames ? `sudo by anyone except ${r.approvedUsernames}` : null,
-        r.businessHourStartUTC !== null
-          ? `sudo outside ${hour(r.businessHourStartUTC)}–${hour(r.businessHourEndUTC)} UTC`
-          : null,
-      ]
-        .filter(Boolean)
-        .join(', or ');
-    default:
-      return '—';
+/** On/off: a switch for managers, plain text for everyone else. */
+function RuleState({ rule, canEdit, onToggle }: { rule: Rule; canEdit: boolean; onToggle: () => void }) {
+  if (!canEdit) {
+    return <span className={cn('text-[13px] font-medium', rule.isActive ? 'text-foreground' : 'text-muted-foreground')}>{rule.isActive ? 'On' : 'Off'}</span>;
   }
+  return <Switch checked={rule.isActive} onChange={onToggle} label={`${rule.name} on`} />;
+}
+
+// First run: the six templates, each addable on its own or all at once.
+function TemplatesEmptyState({
+  canEdit,
+  onAdded,
+  onNew,
+}: {
+  canEdit: boolean;
+  onAdded: (rules: Rule[]) => void;
+  onNew: () => void;
+}) {
+  const toast = useToast();
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function add(names: string[]) {
+    setBusy(names.length > 1 ? 'all' : names[0]);
+    const results = await Promise.allSettled(
+      RULE_TEMPLATES.filter((t) => names.includes(t.name)).map((t) => apiClient.post<Rule>('/rules', templatePayload(t))),
+    );
+    const added = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+    const failure = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+    if (failure) toast.error(added.length ? `Added ${added.length} of ${names.length} rules` : "Couldn't add the rule", friendlyError(failure.reason));
+    else toast.success(added.length === 1 ? `${added[0].name} added` : `Added ${added.length} rules`, 'They are checked every 30 seconds.');
+    onAdded(added);
+    setBusy(null);
+  }
+
+  if (!canEdit) {
+    return <EmptyState art="rules" title="No rules yet" description="Rules your team creates appear here." />;
+  }
+  return (
+    <div className="p-4 sm:p-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-[15px] font-semibold text-foreground">No rules yet</p>
+          <p className="mt-1 max-w-xl text-[14px] leading-relaxed text-muted-foreground">
+            Start with the recommended rules. You can change or turn off each one later.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="ghost" onClick={onNew} disabled={!!busy}>
+            Write your own
+          </Button>
+          <Button onClick={() => add(RULE_TEMPLATES.map((t) => t.name))} disabled={!!busy}>
+            {busy === 'all' ? 'Adding…' : 'Add all six'}
+          </Button>
+        </div>
+      </div>
+      <div className="mt-5 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+        {RULE_TEMPLATES.map((t) => (
+          <TemplateCard
+            key={t.name}
+            template={t}
+            action={
+              <Button size="xs" variant="outline" onClick={() => add([t.name])} disabled={!!busy}>
+                <Plus />
+                {busy === t.name ? 'Adding…' : 'Add'}
+              </Button>
+            }
+          />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function RulesContent() {
   const { user } = useAuth();
+  const toast = useToast();
   const canEdit = canManageSecurity(user?.role);
-  const [showForm, setShowForm] = useState(false);
-  const [rules, setRules] = useState<Rule[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [rules, setRules] = useState<Rule[] | null>(null);
   const [error, setError] = useState('');
-  const [ruleType, setRuleType] = useState('METRIC_THRESHOLD');
-  const [name, setName] = useState('');
-  const [metricField, setMetricField] = useState('CPU_USAGE');
-  const [operator, setOperator] = useState('GREATER_THAN');
-  const [threshold, setThreshold] = useState('80');
-  const [durationSeconds, setDurationSeconds] = useState('60');
-  const [eventType, setEventType] = useState('AUTH_LOGIN_FAILURE');
-  const [groupByField, setGroupByField] = useState('ipAddress');
-  const [maxCount, setMaxCount] = useState('5');
-  const [windowSeconds, setWindowSeconds] = useState('600');
-  const [approvedUsernames, setApprovedUsernames] = useState('');
-  const [businessHourStart, setBusinessHourStart] = useState('9');
-  const [businessHourEnd, setBusinessHourEnd] = useState('18');
-  const [severity, setSeverity] = useState('MEDIUM');
-  const [saving, setSaving] = useState(false);
-  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
-
-  function loadRules() {
-    apiClient
-      .get<Rule[]>('/rules')
-      .then(setRules)
-      .catch((err) => setError(err.message))
-      .finally(() => setLoaded(true));
-  }
+  const [attempt, setAttempt] = useState(0);
+  const [form, setForm] = useState<{ rule: Rule | null } | null>(null);
+  const [deleting, setDeleting] = useState<Rule | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   useEffect(() => {
-    loadRules();
-  }, []);
+    let cancelled = false;
+    apiClient
+      .get<Rule[]>('/rules')
+      .then((list) => {
+        if (cancelled) return;
+        setRules(list);
+        setError('');
+      })
+      .catch((err) => !cancelled && setError(friendlyError(err)));
+    return () => {
+      cancelled = true;
+    };
+  }, [attempt]);
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setError('');
-    try {
-      let payload: Record<string, unknown> = { name, ruleType, severity };
-
-      if (ruleType === 'METRIC_THRESHOLD') {
-        payload = { ...payload, metricField, operator, threshold: Number(threshold), durationSeconds: Number(durationSeconds) };
-      } else if (ruleType === 'EVENT_FREQUENCY') {
-        payload = { ...payload, eventType, groupByField, maxCount: Number(maxCount), windowSeconds: Number(windowSeconds) };
-      } else if (ruleType === 'HEARTBEAT_MISSING') {
-        payload = { ...payload, durationSeconds: Number(durationSeconds) };
-      } else if (ruleType === 'CREDENTIAL_STUFFING') {
-        payload = { ...payload, windowSeconds: Number(windowSeconds), maxCount: Number(maxCount) };
-      } else if (ruleType === 'UNUSUAL_ACCESS') {
-        // Empty fields are sent as null so they can also be cleared when editing.
-        payload = {
-          ...payload,
-          approvedUsernames: approvedUsernames.trim() || null,
-          businessHourStartUTC: businessHourStart === '' ? null : Number(businessHourStart),
-          businessHourEndUTC: businessHourEnd === '' ? null : Number(businessHourEnd),
-        };
-      }
-
-      if (editingRuleId) {
-        await apiClient.patch(`/rules/${editingRuleId}`, payload);
-      } else {
-        await apiClient.post('/rules', payload);
-      }
-      resetForm();
-      loadRules();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save rule');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleToggle(rule: Rule) {
-    setError('');
-    try {
-      await apiClient.patch(`/rules/${rule.id}/toggle`, { isActive: !rule.isActive });
-      loadRules();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to change the rule');
-    }
-  }
-
-  async function handleDelete(rule: Rule) {
-    if (confirm(`Delete rule "${rule.name}"? Its past alerts and incidents are kept.`)) {
-      setError('');
-      try {
-        await apiClient.delete(`/rules/${rule.id}`);
-        loadRules();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to delete the rule');
-      }
-    }
-  }
-
-  function applyPreset(p: (typeof PRESETS)[number]) {
-    setEditingRuleId(null);
-    setName(p.label);
-    setRuleType(p.ruleType);
-    if (p.metricField) setMetricField(p.metricField);
-    if (p.operator) setOperator(p.operator);
-    if (p.threshold) setThreshold(p.threshold);
-    if (p.durationSeconds) setDurationSeconds(p.durationSeconds);
-    if (p.eventType) setEventType(p.eventType);
-    if (p.groupByField) setGroupByField(p.groupByField);
-    if (p.maxCount) setMaxCount(p.maxCount);
-    if (p.windowSeconds) setWindowSeconds(p.windowSeconds);
-    if (p.businessHourStart) {
-      setApprovedUsernames('');
-      setBusinessHourStart(p.businessHourStart);
-      setBusinessHourEnd(p.businessHourEnd ?? '18');
-    }
-    setSeverity(p.severity);
-    setShowForm(true);
-  }
-
-  function startEdit(r: Rule) {
-    setEditingRuleId(r.id);
-    setName(r.name);
-    setRuleType(r.ruleType);
-    setMetricField(r.metricField ?? 'CPU_USAGE');
-    setOperator(r.operator ?? 'GREATER_THAN');
-    setThreshold(String(r.threshold ?? '80'));
-    setDurationSeconds(String(r.durationSeconds ?? '60'));
-    setEventType(r.eventType ?? 'AUTH_LOGIN_FAILURE');
-    setGroupByField(r.groupByField ?? 'ipAddress');
-    setMaxCount(String(r.maxCount ?? '5'));
-    setWindowSeconds(String(r.windowSeconds ?? '600'));
-    setApprovedUsernames(r.approvedUsernames ?? '');
-    setBusinessHourStart(r.businessHourStartUTC === null ? '' : String(r.businessHourStartUTC));
-    setBusinessHourEnd(r.businessHourEndUTC === null ? '' : String(r.businessHourEndUTC));
-    setSeverity(r.severity);
-    setShowForm(true);
+  function openForm(rule: Rule | null) {
+    setForm({ rule });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  function resetForm() {
-    setEditingRuleId(null);
-    setName('');
-    setShowForm(false);
-    setError('');
+  function saved(rule: Rule) {
+    const editing = !!form?.rule;
+    setRules((list) => (editing ? (list ?? []).map((r) => (r.id === rule.id ? rule : r)) : [...(list ?? []), rule]));
+    setForm(null);
+    toast.success(editing ? 'Rule saved' : `${rule.name} created`, editing ? undefined : 'It is checked every 30 seconds.');
   }
 
-  const activeCount = rules.filter((r) => r.isActive).length;
-  const typeHint = RULE_TYPES.find((t) => t.value === ruleType)?.hint;
+  async function toggle(rule: Rule) {
+    const isActive = !rule.isActive;
+    setTogglingId(rule.id);
+    setRules((list) => list?.map((r) => (r.id === rule.id ? { ...r, isActive } : r)) ?? null);
+    try {
+      await apiClient.patch(`/rules/${rule.id}/toggle`, { isActive });
+      toast.success(`${rule.name} turned ${isActive ? 'on' : 'off'}`);
+    } catch (err) {
+      setRules((list) => list?.map((r) => (r.id === rule.id ? { ...r, isActive: !isActive } : r)) ?? null);
+      toast.error(`Couldn't turn ${rule.name} ${isActive ? 'on' : 'off'}`, friendlyError(err));
+    } finally {
+      setTogglingId(null);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleting) return;
+    setDeleteBusy(true);
+    setDeleteError('');
+    try {
+      await apiClient.delete(`/rules/${deleting.id}`);
+      setRules((list) => list?.filter((r) => r.id !== deleting.id) ?? null);
+      if (form?.rule?.id === deleting.id) setForm(null);
+      toast.success(`${deleting.name} deleted`);
+      setDeleteOpen(false);
+    } catch (err) {
+      setDeleteError(friendlyError(err));
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
+  const sorted = [...(rules ?? [])].sort(byRuleOrder);
+  const activeCount = sorted.filter((r) => r.isActive).length;
+  const menuFor = (rule: Rule) =>
+    canEdit && (
+      <RuleMenu
+        rule={rule}
+        onEdit={() => openForm(rule)}
+        onDelete={() => {
+          setDeleting(rule);
+          setDeleteError('');
+          setDeleteOpen(true);
+        }}
+      />
+    );
 
   return (
     <AppShell
       title="Rules"
-      description="Detection rules the engine checks every 30 seconds. A rule that matches raises an alert."
+      meta={rules && rules.length > 0 ? `${activeCount} of ${rules.length} on · checked every 30 s` : undefined}
       actions={
-        canEdit && (
-          <Button variant={showForm ? 'outline' : 'default'} onClick={() => (showForm ? resetForm() : setShowForm(true))}>
-            {showForm ? <X /> : <Plus />}
-            {showForm ? 'Close' : 'New rule'}
+        canEdit &&
+        !form &&
+        rules &&
+        rules.length > 0 && (
+          <Button className="flex-1 sm:flex-none" onClick={() => openForm(null)}>
+            <Plus />
+            New rule
           </Button>
         )
       }
     >
-      <div className="space-y-6">
-        {canEdit ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="mr-1 inline-flex items-center gap-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-              <Sparkles className="size-3.5 text-primary-bright" strokeWidth={2} aria-hidden />
-              Quick presets
-            </span>
-            {PRESETS.map((p) => (
-              <button
-                key={p.label}
-                type="button"
-                onClick={() => applyPreset(p)}
-                className="inline-flex h-8 items-center gap-2 rounded-full border border-border-strong bg-surface-2/60 px-3 text-[13px] font-medium text-foreground transition-colors hover:border-primary/50 hover:bg-primary/10"
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <Notice tone="info">You can view the rules. Only owners, admins and security analysts can change them.</Notice>
-        )}
+      <div className="space-y-5 sm:space-y-6">
+        {form && <RuleForm key={form.rule?.id ?? 'new'} rule={form.rule} onSaved={saved} onCancel={() => setForm(null)} />}
 
-        {error && <Notice tone="error">{error}</Notice>}
-
-        {canEdit && showForm && (
-          <Panel
-            label={editingRuleId ? 'Edit rule' : 'New rule'}
-            title={name || 'Untitled rule'}
-            brackets
-            actions={
-              <Button size="icon-sm" variant="ghost" onClick={resetForm} aria-label="Close the form">
-                <X />
-              </Button>
-            }
-          >
-            <form onSubmit={handleCreate} className="space-y-5">
-              <div className="grid gap-5 lg:grid-cols-2">
-                <div>
-                  <label htmlFor="rule-name" className={fieldLabelClass}>
-                    Rule name
-                  </label>
-                  <input id="rule-name" value={name} onChange={(e) => setName(e.target.value)} required className={fieldControlClass} />
-                </div>
-                <div>
-                  <label htmlFor="rule-type" className={fieldLabelClass}>
-                    Rule type
-                  </label>
-                  <select id="rule-type" value={ruleType} onChange={(e) => setRuleType(e.target.value)} className={fieldSelectClass}>
-                    {RULE_TYPES.map((t) => (
-                      <option key={t.value} value={t.value}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </select>
-                  {typeHint && <p className={fieldHintClass}>{typeHint}</p>}
-                </div>
-              </div>
-
-              {ruleType === 'METRIC_THRESHOLD' && (
-                <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                  <div>
-                    <label htmlFor="rule-metric" className={fieldLabelClass}>
-                      Metric
-                    </label>
-                    <select id="rule-metric" value={metricField} onChange={(e) => setMetricField(e.target.value)} className={fieldSelectClass}>
-                      {METRIC_FIELDS.map((m) => (
-                        <option key={m.value} value={m.value}>
-                          {m.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label htmlFor="rule-operator" className={fieldLabelClass}>
-                      Operator
-                    </label>
-                    <select id="rule-operator" value={operator} onChange={(e) => setOperator(e.target.value)} className={fieldSelectClass}>
-                      <option value="GREATER_THAN">Greater than</option>
-                      <option value="LESS_THAN">Less than</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label htmlFor="rule-threshold" className={fieldLabelClass}>
-                      Threshold
-                    </label>
-                    <input id="rule-threshold" type="number" value={threshold} onChange={(e) => setThreshold(e.target.value)} className={fieldControlClass} />
-                  </div>
-                  <div>
-                    <label htmlFor="rule-duration" className={fieldLabelClass}>
-                      Sustained for (seconds)
-                    </label>
-                    <input id="rule-duration" type="number" value={durationSeconds} onChange={(e) => setDurationSeconds(e.target.value)} className={fieldControlClass} />
-                  </div>
-                </div>
-              )}
-
-              {ruleType === 'EVENT_FREQUENCY' && (
-                <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                  <div>
-                    <label htmlFor="rule-event" className={fieldLabelClass}>
-                      Event type
-                    </label>
-                    <select id="rule-event" value={eventType} onChange={(e) => setEventType(e.target.value)} className={fieldSelectClass}>
-                      {withCurrent(EVENT_TYPES, eventType).map((t) => (
-                        <option key={t.value} value={t.value}>
-                          {t.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label htmlFor="rule-group" className={fieldLabelClass}>
-                      Group by field
-                    </label>
-                    <select id="rule-group" value={groupByField} onChange={(e) => setGroupByField(e.target.value)} className={fieldSelectClass}>
-                      {withCurrent(GROUP_BY_FIELDS, groupByField).map((f) => (
-                        <option key={f.value} value={f.value}>
-                          {f.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label htmlFor="rule-count" className={fieldLabelClass}>
-                      Max count
-                    </label>
-                    <input id="rule-count" type="number" value={maxCount} onChange={(e) => setMaxCount(e.target.value)} className={fieldControlClass} />
-                  </div>
-                  <div>
-                    <label htmlFor="rule-window" className={fieldLabelClass}>
-                      Window (seconds)
-                    </label>
-                    <input id="rule-window" type="number" value={windowSeconds} onChange={(e) => setWindowSeconds(e.target.value)} className={fieldControlClass} />
-                  </div>
-                </div>
-              )}
-
-              {ruleType === 'HEARTBEAT_MISSING' && (
-                <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                  <div>
-                    <label htmlFor="rule-missing" className={fieldLabelClass}>
-                      Missing for at least (seconds)
-                    </label>
-                    <input id="rule-missing" type="number" value={durationSeconds} onChange={(e) => setDurationSeconds(e.target.value)} className={fieldControlClass} />
-                  </div>
-                </div>
-              )}
-
-              {ruleType === 'CREDENTIAL_STUFFING' && (
-                <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                  <div>
-                    <label htmlFor="rule-ips" className={fieldLabelClass}>
-                      Min distinct IPs
-                    </label>
-                    <input id="rule-ips" type="number" value={maxCount} onChange={(e) => setMaxCount(e.target.value)} className={fieldControlClass} />
-                  </div>
-                  <div>
-                    <label htmlFor="rule-stuffing-window" className={fieldLabelClass}>
-                      Window (seconds)
-                    </label>
-                    <input id="rule-stuffing-window" type="number" value={windowSeconds} onChange={(e) => setWindowSeconds(e.target.value)} className={fieldControlClass} />
-                  </div>
-                </div>
-              )}
-
-              {ruleType === 'UNUSUAL_ACCESS' && (
-                <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="sm:col-span-2">
-                    <label htmlFor="rule-approved" className={fieldLabelClass}>
-                      Approved sudo users
-                    </label>
-                    <input
-                      id="rule-approved"
-                      value={approvedUsernames}
-                      onChange={(e) => setApprovedUsernames(e.target.value)}
-                      placeholder="saad, hashim"
-                      className={fieldControlClass}
-                    />
-                    <p className={fieldHintClass}>Comma-separated. Leave empty to allow anyone.</p>
-                  </div>
-                  <div>
-                    <label htmlFor="rule-hours-start" className={fieldLabelClass}>
-                      Business hours start
-                    </label>
-                    <input
-                      id="rule-hours-start"
-                      type="number"
-                      min={0}
-                      max={23}
-                      value={businessHourStart}
-                      onChange={(e) => setBusinessHourStart(e.target.value)}
-                      className={fieldControlClass}
-                    />
-                    <p className={fieldHintClass}>UTC hour, 0–23. Empty = any time.</p>
-                  </div>
-                  <div>
-                    <label htmlFor="rule-hours-end" className={fieldLabelClass}>
-                      Business hours end
-                    </label>
-                    <input
-                      id="rule-hours-end"
-                      type="number"
-                      min={0}
-                      max={23}
-                      value={businessHourEnd}
-                      onChange={(e) => setBusinessHourEnd(e.target.value)}
-                      className={fieldControlClass}
-                    />
-                    <p className={fieldHintClass}>UTC hour, 0–23.</p>
-                  </div>
-                </div>
-              )}
-
-              {ruleType === 'ANOMALY_DETECTION' && (
-                <Notice tone="info">
-                  No extra settings needed. Each server is checked against its own trained LSTM-Autoencoder model on every
-                  evaluation.
-                </Notice>
-              )}
-
-              <div className="flex flex-wrap items-end justify-between gap-4 border-t border-border pt-5">
-                <div className="w-full sm:w-56">
-                  <label htmlFor="rule-severity" className={fieldLabelClass}>
-                    Severity
-                  </label>
-                  <select id="rule-severity" value={severity} onChange={(e) => setSeverity(e.target.value)} className={fieldSelectClass}>
-                    <option value="LOW">Low</option>
-                    <option value="MEDIUM">Medium</option>
-                    <option value="HIGH">High</option>
-                    <option value="CRITICAL">Critical</option>
-                  </select>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button type="button" variant="ghost" onClick={resetForm}>
-                    Cancel
+        <Panel flush>
+          {!rules ? (
+            error ? (
+              <EmptyState
+                icon={AlertCircle}
+                tone="error"
+                title="Couldn't load the rules"
+                description={error}
+                action={
+                  <Button size="sm" variant="outline" onClick={() => setAttempt((n) => n + 1)}>
+                    Try again
                   </Button>
-                  <Button type="submit" disabled={saving}>
-                    {saving ? 'Saving...' : editingRuleId ? 'Update rule' : 'Create rule'}
-                  </Button>
-                </div>
-              </div>
-            </form>
-          </Panel>
-        )}
-
-        <Panel
-          label="Detection"
-          title={
-            !loaded
-              ? 'Loading rules...'
-              : rules.length === 0
-                ? 'No rules configured yet'
-                : `${activeCount} of ${rules.length} rules active`
-          }
-          flush
-        >
-          {!loaded ? (
-            <div className="space-y-3 p-5">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-12 animate-pulse rounded-lg bg-muted" />
-              ))}
-            </div>
+                }
+              />
+            ) : (
+              <SkeletonRows rows={5} />
+            )
           ) : rules.length === 0 ? (
-            <EmptyState
-              art="rules"
-              title="No rules yet"
-              description={canEdit ? 'Create a rule above, or start from a quick preset.' : 'Rules your team creates will appear here.'}
+            <TemplatesEmptyState
+              canEdit={canEdit}
+              onAdded={(added) => setRules((list) => [...(list ?? []), ...added])}
+              onNew={() => openForm(null)}
             />
           ) : (
-            <div className="overflow-x-auto [contain:paint]">
-              <table className="w-full min-w-[760px] text-[14px]">
+            <>
+              {/* desktop: a table */}
+              <table className="hidden w-full text-[14px] lg:table">
                 <thead>
                   <tr className="border-b border-border text-left">
-                    <th className="hud-label px-5 py-3 font-medium">Rule</th>
-                    <th className="hud-label px-5 py-3 font-medium">Condition</th>
-                    <th className="hud-label px-5 py-3 font-medium">Severity</th>
-                    <th className="hud-label px-5 py-3 font-medium">Active</th>
-                    <th className="px-5 py-3">
-                      <span className="sr-only">Actions</span>
+                    <th scope="col" className="text-label w-[26%] px-5 py-3 font-medium">
+                      Rule
                     </th>
+                    <th scope="col" className="text-label px-5 py-3 font-medium">
+                      Condition
+                    </th>
+                    <th scope="col" className="text-label w-36 px-5 py-3 font-medium">
+                      Severity
+                    </th>
+                    <th scope="col" className="text-label w-20 px-5 py-3 font-medium">
+                      On
+                    </th>
+                    {canEdit && (
+                      <th scope="col" className="w-14 px-3 py-3">
+                        <span className="sr-only">Actions</span>
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
-                  {rules.map((r) => (
-                    <tr
-                      key={r.id}
-                      className={`border-b border-border/70 transition-colors last:border-0 hover:bg-accent/40 ${r.isActive ? '' : 'opacity-60'}`}
-                    >
-                      <td className="min-w-[13rem] px-5 py-3.5">
-                        <p className="font-semibold text-foreground">{r.name}</p>
-                        <p className="font-mono text-[11.5px] uppercase tracking-[0.08em] text-muted-foreground">
-                          {labelOf(RULE_TYPES, r.ruleType)}
-                        </p>
+                  {sorted.map((rule) => (
+                    <tr key={rule.id} className="border-b border-border transition-colors duration-[120ms] last:border-0 hover:bg-accent/30">
+                      <td className="px-5 py-3.5 align-top">
+                        <p className={cn('font-semibold', rule.isActive ? 'text-foreground' : 'text-muted-foreground')}>{rule.name}</p>
+                        <p className="mt-0.5 text-[13px] text-muted-foreground">{labelOf(RULE_TYPES, rule.ruleType)}</p>
                       </td>
-                      <td className="max-w-[26rem] px-5 py-3.5 text-[13.5px] text-muted-foreground">{describeCondition(r)}</td>
-                      <td className="px-5 py-3.5">
-                        <SeverityBadge severity={r.severity} />
+                      <td className={cn('px-5 py-3.5 align-top text-[13.5px] leading-relaxed', rule.isActive ? 'text-foreground/85' : 'text-muted-foreground')}>
+                        {describeCondition(rule)}
                       </td>
-                      <td className="px-5 py-3.5">
-                        <Switch
-                          checked={r.isActive}
-                          onChange={() => handleToggle(r)}
-                          disabled={!canEdit}
-                          label={`${r.name} active`}
-                        />
+                      <td className="px-5 py-3.5 align-top">
+                        <SeverityBadge severity={rule.severity} className={cn(!rule.isActive && 'opacity-60')} />
                       </td>
-                      <td className="px-5 py-3.5">
-                        {canEdit && (
-                          <div className="flex items-center justify-end gap-1">
-                            <Button size="icon-sm" variant="ghost" onClick={() => startEdit(r)} aria-label={`Edit ${r.name}`} title="Edit">
-                              <Pencil />
-                            </Button>
-                            <Button
-                              size="icon-sm"
-                              variant="ghost"
-                              onClick={() => handleDelete(r)}
-                              aria-label={`Delete ${r.name}`}
-                              title="Delete"
-                              className="hover:bg-destructive/10 hover:text-destructive"
-                            >
-                              <Trash2 />
-                            </Button>
-                          </div>
-                        )}
+                      <td className="px-5 py-3.5 align-top">
+                        <span className={cn('inline-flex h-6 items-center', togglingId === rule.id && 'opacity-70')}>
+                          <RuleState rule={rule} canEdit={canEdit} onToggle={() => toggle(rule)} />
+                        </span>
                       </td>
+                      {canEdit && <td className="px-3 py-2.5 text-right align-top">{menuFor(rule)}</td>}
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
+
+              {/* phones and tablets: a list */}
+              <ul className="divide-y divide-border lg:hidden">
+                {sorted.map((rule) => (
+                  <li key={rule.id} className="flex items-start gap-2 py-3.5 pl-4 pr-2 sm:pl-5">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className={cn('truncate text-[14.5px] font-semibold', rule.isActive ? 'text-foreground' : 'text-muted-foreground')}>
+                          {rule.name}
+                        </p>
+                        <RuleState rule={rule} canEdit={canEdit} onToggle={() => toggle(rule)} />
+                      </div>
+                      <p className={cn('mt-1 text-[13.5px] leading-relaxed', rule.isActive ? 'text-foreground/85' : 'text-muted-foreground')}>
+                        {describeCondition(rule)}
+                      </p>
+                      <p className="mt-2 flex items-center gap-2.5 text-[12.5px] text-muted-foreground">
+                        <SeverityBadge severity={rule.severity} compact />
+                        {labelOf(RULE_TYPES, rule.ruleType)}
+                      </p>
+                    </div>
+                    {canEdit && <div className="-my-1">{menuFor(rule)}</div>}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {rules && rules.length > 0 && !canEdit && (
+            <p className="border-t border-border px-4 py-3.5 text-[13.5px] text-muted-foreground sm:px-5">
+              View only. Owners, admins and security analysts can change rules.
+            </p>
           )}
         </Panel>
       </div>
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        busy={deleteBusy}
+        error={deleteError}
+        title={`Delete ${deleting?.name ?? 'rule'}?`}
+        description="Its past alerts and incidents stay."
+        confirmLabel="Delete rule"
+        onConfirm={confirmDelete}
+      />
     </AppShell>
   );
 }
