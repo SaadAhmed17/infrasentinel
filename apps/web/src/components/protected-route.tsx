@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { AppBackground } from '@/components/app-background';
 import { LogoMark } from '@/components/brand/logo';
+import { loginUrlWithNext } from '@/lib/next-path';
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -12,7 +13,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!loading && !user) {
-      router.push('/login');
+      router.push(loginUrlWithNext());
     }
   }, [loading, user, router]);
 

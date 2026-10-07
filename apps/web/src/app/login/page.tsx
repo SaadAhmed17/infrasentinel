@@ -1,16 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { Loader2, Lock, Mail } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { AuthShell, authButtonClassName, authLinkClassName } from '@/components/auth-shell';
 import { IconInput, PasswordVisibilityToggle } from '@/components/ui/icon-input';
 import { Label } from '@/components/ui/label';
 import { Notice } from '@/components/ui/notice';
+import { friendlyError } from '@/lib/errors';
 
-export default function LoginPage() {
+function LoginForm() {
   const { login } = useAuth();
+  const next = useSearchParams().get('next');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -22,9 +25,9 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      await login(email, password);
+      await login(email, password, next);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setError(friendlyError(err, "Couldn't sign in. Try again."));
     } finally {
       setLoading(false);
     }
@@ -32,6 +35,7 @@ export default function LoginPage() {
 
   return (
     <AuthShell
+      guestOnly
       title="Welcome back"
       description="Sign in to your organization's security console."
       footer={
@@ -49,8 +53,10 @@ export default function LoginPage() {
           <IconInput
             icon={Mail}
             id="email"
+            name="email"
             type="email"
             autoComplete="email"
+            autoFocus
             placeholder="you@company.com"
             required
             value={email}
@@ -68,6 +74,7 @@ export default function LoginPage() {
           <IconInput
             icon={Lock}
             id="password"
+            name="password"
             type={showPassword ? 'text' : 'password'}
             autoComplete="current-password"
             placeholder="Your password"
@@ -84,7 +91,7 @@ export default function LoginPage() {
           {loading ? (
             <>
               <Loader2 className="size-4 animate-spin" />
-              Signing in...
+              Signing in…
             </>
           ) : (
             'Sign in'
@@ -92,5 +99,14 @@ export default function LoginPage() {
         </button>
       </form>
     </AuthShell>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    // useSearchParams (?next= after a session ran out) needs a Suspense boundary
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <LoginForm />
+    </Suspense>
   );
 }

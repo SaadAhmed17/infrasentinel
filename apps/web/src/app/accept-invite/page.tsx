@@ -3,13 +3,13 @@
 import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Check, Loader2, Lock } from 'lucide-react';
+import { Loader2, Lock } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
-import { AuthShell, authButtonClassName, authLinkClassName } from '@/components/auth-shell';
+import { AuthShell, PasswordRule, authButtonClassName, authLinkClassName } from '@/components/auth-shell';
+import { friendlyError } from '@/lib/errors';
 import { IconInput, PasswordVisibilityToggle } from '@/components/ui/icon-input';
 import { Label } from '@/components/ui/label';
 import { Notice } from '@/components/ui/notice';
-import { cn } from '@/lib/utils';
 
 function AcceptInviteForm() {
   const searchParams = useSearchParams();
@@ -26,7 +26,7 @@ function AcceptInviteForm() {
     setError('');
 
     if (!token) {
-      setError('Invalid invitation link — no token found.');
+      setError('This invitation link is incomplete.');
       return;
     }
 
@@ -36,7 +36,8 @@ function AcceptInviteForm() {
       // Signs the new member in, like login and signup, and opens the dashboard.
       await acceptInvitation(token, password);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to accept invitation');
+      const message = friendlyError(err, "Couldn't accept the invitation. Try again.");
+      setError(/expired|invalid|not found|already/i.test(message) ? 'This invitation has expired or was already used. Ask your admin for a new link.' : message);
     } finally {
       setLoading(false);
     }
@@ -53,8 +54,12 @@ function AcceptInviteForm() {
 
   if (!token) {
     return (
-      <AuthShell title="Invalid invitation link" description="This link is missing its invitation code." footer={signInInstead}>
-        <Notice tone="error">This invitation link is missing a token. Please check the link you were sent.</Notice>
+      <AuthShell
+        title="This invitation link is incomplete"
+        description="Open the link exactly as you received it, or ask your admin for a new one."
+        footer={signInInstead}
+      >
+        {null}
       </AuthShell>
     );
   }
@@ -83,17 +88,7 @@ function AcceptInviteForm() {
             onChange={(e) => setPassword(e.target.value)}
             trailing={<PasswordVisibilityToggle visible={showPassword} onToggle={() => setShowPassword((v) => !v)} />}
           />
-          {password.length > 0 && (
-            <p
-              className={cn(
-                'flex items-center gap-1.5 text-[12.5px] font-medium',
-                passwordValid ? 'text-status-online' : 'text-muted-foreground',
-              )}
-            >
-              {passwordValid && <Check className="size-3.5" strokeWidth={2.5} />}
-              At least 8 characters
-            </p>
-          )}
+          <PasswordRule met={passwordValid} />
         </div>
 
         {error && <Notice tone="error">{error}</Notice>}

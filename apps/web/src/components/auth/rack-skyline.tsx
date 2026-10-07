@@ -115,7 +115,7 @@ function Rack({ index, x, w, h }: RackSpec & { index: number }) {
     const y = top + 2 + u * 4;
     parts.push(<rect key={`line-${u}`} x={x + 1} y={y + 3} width={w - 1} height={1} fill="var(--scene-rack-line)" />);
     const kind: LedKind = LED_OVERRIDES[`${index}-${u}`] ?? 'ok';
-    const blinking = kind !== 'ok' || next() > 0.55;
+    const blinking = kind !== 'ok' || next() > 0.85;
     parts.push(
       <rect
         key={`led-${u}`}
@@ -125,7 +125,7 @@ function Rack({ index, x, w, h }: RackSpec & { index: number }) {
         height={1}
         fill={`var(--scene-led-${kind})`}
         className={blinking ? 'animate-rack-blink' : undefined}
-        style={blinking ? { animationDelay: `${(next() * 1.4).toFixed(2)}s` } : undefined}
+        style={blinking ? { animationDuration: '2.4s', animationDelay: `${(next() * 2.4).toFixed(2)}s` } : undefined}
       />,
     );
     if (w > 11) {

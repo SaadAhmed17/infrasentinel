@@ -8,6 +8,7 @@ import { AuthShell, authButtonClassName, authLinkClassName } from '@/components/
 import { IconInput } from '@/components/ui/icon-input';
 import { Label } from '@/components/ui/label';
 import { Notice } from '@/components/ui/notice';
+import { friendlyError } from '@/lib/errors';
 
 // Must match PASSWORD_RESET_TOKEN_MINUTES in the API.
 const RESET_LINK_MINUTES = 30;
@@ -22,7 +23,7 @@ export default function ForgotPasswordPage() {
     e.preventDefault();
     setError('');
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
-      setError('Enter a valid email address');
+      setError('Enter a valid email address.');
       return;
     }
 
@@ -31,7 +32,7 @@ export default function ForgotPasswordPage() {
       await apiClient.post('/auth/forgot-password', { email: email.trim() });
       setSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not send the reset link');
+      setError(friendlyError(err, "Couldn't send the reset link. Try again."));
     } finally {
       setLoading(false);
     }

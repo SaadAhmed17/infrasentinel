@@ -3,9 +3,10 @@
 import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Check, KeyRound, Loader2, Lock } from 'lucide-react';
+import { Check, Loader2, Lock } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
-import { AuthShell, authButtonClassName, authLinkClassName } from '@/components/auth-shell';
+import { AuthShell, PasswordRule, authButtonClassName, authLinkClassName } from '@/components/auth-shell';
+import { friendlyError } from '@/lib/errors';
 import { IconInput, PasswordVisibilityToggle } from '@/components/ui/icon-input';
 import { Label } from '@/components/ui/label';
 import { Notice } from '@/components/ui/notice';
@@ -27,11 +28,11 @@ function ResetPasswordForm() {
     e.preventDefault();
     setError('');
     if (!passwordValid) {
-      setError('Your new password must be at least 8 characters');
+      setError('Your new password needs at least 8 characters.');
       return;
     }
     if (password !== confirmPassword) {
-      setError('The passwords do not match');
+      setError("The passwords don't match.");
       return;
     }
 
@@ -43,7 +44,7 @@ function ResetPasswordForm() {
       localStorage.removeItem('refreshToken');
       setDone(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not reset your password');
+      setError(friendlyError(err, "Couldn't reset your password. Try again."));
     } finally {
       setLoading(false);
     }
@@ -60,8 +61,13 @@ function ResetPasswordForm() {
 
   if (!token) {
     return (
-      <AuthShell title="Invalid reset link" description="This link is missing its reset code." footer={requestNewLink}>
-        <Notice tone="error">Open the link exactly as it appears in the email, or request a new one.</Notice>
+      <AuthShell
+        title="This reset link is incomplete"
+        description="Open the link exactly as it appears in the email, or request a new one."
+      >
+        <Link href="/forgot-password" className={authButtonClassName}>
+          Request a new link
+        </Link>
       </AuthShell>
     );
   }
@@ -97,23 +103,13 @@ function ResetPasswordForm() {
             onChange={(e) => setPassword(e.target.value)}
             trailing={<PasswordVisibilityToggle visible={showPassword} onToggle={() => setShowPassword((v) => !v)} />}
           />
-          {password.length > 0 && (
-            <p
-              className={cn(
-                'flex items-center gap-1.5 text-[12.5px] font-medium',
-                passwordValid ? 'text-status-online' : 'text-muted-foreground',
-              )}
-            >
-              {passwordValid && <Check className="size-3.5" strokeWidth={2.5} />}
-              At least 8 characters
-            </p>
-          )}
+          <PasswordRule met={passwordValid} />
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="confirmPassword">Confirm new password</Label>
           <IconInput
-            icon={KeyRound}
+            icon={Lock}
             id="confirmPassword"
             type={showPassword ? 'text' : 'password'}
             autoComplete="new-password"
@@ -141,7 +137,7 @@ function ResetPasswordForm() {
           {loading ? (
             <>
               <Loader2 className="size-4 animate-spin" />
-              Saving...
+              Saving…
             </>
           ) : (
             'Reset password'

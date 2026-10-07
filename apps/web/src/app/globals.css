@@ -182,12 +182,12 @@
   --shadow-panel: 0 1px 2px rgb(11 23 36 / 0.05);
 
   /* pixel skyline on the sign-in pages: an ink print on blueprint paper */
-  --scene-star: rgb(47 79 224 / 0.35);
+  --scene-star: rgb(11 23 36 / 0.18);
   --scene-sun-1: #a6e6df;
   --scene-sun-2: #4fbfb5;
   --scene-sun-3: #1f8f93;
-  --scene-far: #c5d2dc;
-  --scene-rack: #0b1724;
+  --scene-far: #d3dde4;
+  --scene-rack: #64768f;
   --scene-rack-edge: #2b4366;
   --scene-rack-line: #e8edf0;
   --scene-led-ok: #2ed3c3;

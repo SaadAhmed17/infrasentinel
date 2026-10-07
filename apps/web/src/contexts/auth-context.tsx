@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api-client';
+import { safeNextPath } from '@/lib/next-path';
 import { resetShellState } from '@/lib/shell-store';
 
 interface User {
@@ -15,7 +16,8 @@ interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  /** `next` is a page on this site to open after signing in. */
+  login: (email: string, password: string, next?: string | null) => Promise<void>;
   signup: (email: string, password: string, organizationName: string) => Promise<void>;
   acceptInvitation: (token: string, password: string) => Promise<void>;
   logout: () => void;
@@ -48,17 +50,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Saves the tokens, sets the signed-in user and opens the dashboard.
-  function startSession(data: Tokens) {
+  function startSession(data: Tokens, next?: string | null) {
     resetShellState();
     localStorage.setItem('accessToken', data.accessToken);
     localStorage.setItem('refreshToken', data.refreshToken);
     const payload = JSON.parse(atob(data.accessToken.split('.')[1]));
     setUser({ userId: payload.sub, email: payload.email, role: payload.role, organizationId: payload.organizationId });
-    router.push('/dashboard');
+    router.push(safeNextPath(next) ?? '/dashboard');
   }
 
-  async function login(email: string, password: string) {
-    startSession(await apiClient.post<Tokens>('/auth/login', { email, password }));
+  async function login(email: string, password: string, next?: string | null) {
+    startSession(await apiClient.post<Tokens>('/auth/login', { email, password }), next);
   }
 
   async function signup(email: string, password: string, organizationName: string) {

@@ -1,3 +1,5 @@
+import { loginUrlWithNext } from './next-path';
+
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 interface ApiError {
@@ -52,7 +54,8 @@ async function apiFetch<T>(path: string, options: RequestInit = {}, isRetry = fa
     // Refresh failed too — clear tokens and force a real re-login
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
-    window.location.href = '/login';
+    // back to this page after signing in again
+    window.location.href = loginUrlWithNext();
     throw new Error('Session expired, please log in again');
   }
 
