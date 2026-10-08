@@ -44,7 +44,7 @@ def scoring(trained_dir, monkeypatch):
     monkeypatch.setattr(inference, "_model_cache", {})
 
     def score(recent_df, server_id=SERVER):
-        monkeypatch.setattr(inference, "load_metrics_for_server", lambda _id: recent_df.copy())
+        monkeypatch.setattr(inference, "load_recent_metrics", lambda _id, _limit: recent_df.copy())
         return inference.score_server(server_id)
 
     return score
@@ -131,7 +131,7 @@ def test_ML_INF_007_windows_server_is_trained_and_scored_end_to_end(tmp_path, mo
     monkeypatch.setattr(inference, "_model_cache", {})
     preprocess.process_server("win-host", history)
     train.train_one_server("win-host")
-    monkeypatch.setattr(inference, "load_metrics_for_server", lambda _id: history.copy())
+    monkeypatch.setattr(inference, "load_recent_metrics", lambda _id, limit: history.tail(limit).copy())
 
     result = inference.score_server("win-host")
 
@@ -196,6 +196,49 @@ def test_ML_INF_006_threshold_boundary_is_strictly_greater_than(trained_dir, mon
     monkeypatch.setattr(inference, "_model_cache", {
         SERVER: {"model": _Identity(), "scaler": scaler, "config": {"anomaly_threshold": threshold}},
     })
-    monkeypatch.setattr(inference, "load_metrics_for_server", lambda _id: normal_telemetry(20))
+    monkeypatch.setattr(inference, "load_recent_metrics", lambda _id, _limit: normal_telemetry(20))
 
     assert inference.score_server(SERVER)["isAnomaly"] is expected
+
+
+def test_ML_INF_008_scoring_reads_only_recent_readings_not_the_whole_history(trained_dir, monkeypatch):
+    """DEF-33 regression: every 30-second check used to download a server's entire
+    history (megabytes per server); scoring needs only the latest window."""
+    monkeypatch.setattr(inference, "ARTIFACTS_DIR", str(trained_dir))
+    monkeypatch.setattr(inference, "_model_cache", {})
+    asked = []
+
+    def recent(_id, limit):
+        asked.append(limit)
+        return normal_telemetry(limit, seed=21)
+
+    monkeypatch.setattr(inference, "load_recent_metrics", recent)
+
+    result = inference.score_server(SERVER)
+
+    assert asked == [inference.RECENT_READINGS]
+    assert preprocess.WINDOW_SIZE < inference.RECENT_READINGS <= 500
+    assert "reconstructionError" in result
+
+
+def test_ML_PIPE_001_recent_metrics_are_the_newest_rows_returned_oldest_first(monkeypatch):
+    import data_pipeline
+
+    class _Conn:
+        def close(self):
+            pass
+
+    captured = {}
+
+    def fake_read_sql(query, _conn, params):
+        captured["query"], captured["params"] = " ".join(query.split()), params
+        return data_pipeline.pd.DataFrame({"timestamp": [3, 2, 1]})  # database order: newest first
+
+    monkeypatch.setattr(data_pipeline, "get_connection", lambda: _Conn())
+    monkeypatch.setattr(data_pipeline.pd, "read_sql", fake_read_sql)
+
+    df = data_pipeline.load_recent_metrics("srv", 3)
+
+    assert 'ORDER BY "timestamp" DESC LIMIT %s' in captured["query"]
+    assert captured["params"] == ("srv", 3)
+    assert df["timestamp"].tolist() == [1, 2, 3]

@@ -4,12 +4,16 @@ import pickle
 
 import torch
 
-from data_pipeline import FEATURE_COLUMNS, load_metrics_for_server
+from data_pipeline import FEATURE_COLUMNS, load_recent_metrics
 from model import LSTMAutoencoder
 from preprocess import WINDOW_SIZE, clean_and_transform
 
 ARTIFACTS_DIR = os.path.join(os.path.dirname(
     os.path.abspath(__file__)), "artifacts")
+
+# Only the newest readings are scored, so only those are read: enough to leave a
+# full window after incomplete rows are dropped (~35 KB instead of the whole history).
+RECENT_READINGS = 200
 
 # Cache loaded models/scalers in memory so we don't reload from disk on every single request
 _model_cache = {}
@@ -54,7 +58,7 @@ def score_server(server_id: str):
         return {"error": f"No trained model exists for server {server_id}"}
 
     # Exactly the same cleaning as training (incl. never-reported features).
-    df = clean_and_transform(load_metrics_for_server(server_id))
+    df = clean_and_transform(load_recent_metrics(server_id, RECENT_READINGS))
 
     if len(df) < WINDOW_SIZE:
         return {"error": f"Not enough recent data — need {WINDOW_SIZE} readings, have {len(df)}"}

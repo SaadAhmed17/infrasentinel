@@ -23,7 +23,7 @@ effort was spent.
 | R14 | Agent misses or misreports security events | 3 | 3 | 9 | AGENT-SSH-001..032 | **DEF-29** found |
 | R15 | Monitoring shows wrong server state | 3 | 3 | 9 | MON-001, SIEM-020..022 | **DEF-14** found |
 | R16 | Regressions ship because tests do not run automatically | 4 | 5 | **20** | CI pipeline (this branch) | **DEF-32** — fixed once merged |
-| R17 | Performance degrades as telemetry grows | 3 | 2 | 6 | planned (PERFORMANCE_TESTING.md) | not yet executed; DEF-33 noted from code |
+| R17 | Performance degrades as telemetry grows | 3 | 2 | 6 | planned (PERFORMANCE_TESTING.md) | not yet executed; DEF-33 (full-history read per score) fixed 2026-10-09 |
 | R18 | UI shows misleading errors or state | 2 | 3 | 6 | code review (UI in redesign) | **DEF-11** found |
 
 Residual-risk summary: the highest risks (R1–R5) were tested most deeply. Their
@@ -50,7 +50,7 @@ all detection boundaries), and the defects found are specific and fixable.
 | R14 | DEF-29 partly (refused sudo reported as FAILURE) | DEF-29 (rest) |
 | R15 | DEF-14 | — |
 | R16 | DEF-32 | — |
-| R17 | — | DEF-33 (performance tests not executed) |
+| R17 | DEF-33 | performance tests not executed |
 | R18 | DEF-11, DEF-41, DEF-42 | — |
 | R19 *(identified this cycle)*: security evidence lost or misattributed — I 3, L 3, score 9; tests REG-020..022, REG-030/031, REG-060 | DEF-48, DEF-51, DEF-53 | — |
 

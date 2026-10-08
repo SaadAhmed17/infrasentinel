@@ -11,7 +11,7 @@ The fixes approved by the team lead and the test suite were applied to `team-dev
 | Tests run in CI | 0 | pipeline written | all suites on every push and PR of `team-dev` (first run on push) |
 | Backend statement coverage | 17.8% | 94.7% (integration) | 94.4% (integration) |
 | Real-database testing | none | PostgreSQL + pgvector (PGlite locally, service container in CI) | same |
-| Defects logged | 0 | 45 (2 Critical, 7 High, 19 Medium, 17 Low) | 54 — **36 fixed**, 3 partly fixed, 15 open (2026-10-08) |
+| Defects logged | 0 | 45 (2 Critical, 7 High, 19 Medium, 17 Low) | 54 — **37 fixed**, 3 partly fixed, 14 open (2026-10-09) |
 | System test of `main` | none | 14 scenarios on the live stack: 6 pass, 1 partial, 7 fail | 7 of the 8 failures fixed (DEF-27 open); live re-run pending |
 | ML quality evidence | none | F1 0.914, FPR 3.7%, ROC-AUC 0.958 on a labelled benchmark | F1 0.890, FPR 1.2%, ROC-AUC 0.958 at the 99th-percentile threshold (2026-10-08, DEF-54) |
 

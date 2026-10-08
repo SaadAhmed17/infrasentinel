@@ -39,6 +39,24 @@ def load_metrics_for_server(server_id: str) -> pd.DataFrame:
     return df
 
 
+def load_recent_metrics(server_id: str, limit: int) -> pd.DataFrame:
+    """The newest `limit` metrics for one server, oldest first — for live scoring.
+    Reading the whole history on every 30-second check sent megabytes per server
+    from the database each time (DEF-33)."""
+    conn = get_connection()
+    columns_sql = ", ".join(f'"{c}"' for c in FEATURE_COLUMNS)
+    query = f"""
+        SELECT {columns_sql}, "timestamp"
+        FROM "Metric"
+        WHERE "serverId" = %s
+        ORDER BY "timestamp" DESC
+        LIMIT %s
+    """
+    df = pd.read_sql(query, conn, params=(server_id, limit))
+    conn.close()
+    return df.iloc[::-1].reset_index(drop=True)
+
+
 def load_all_servers() -> dict:
     """Pull metrics for every server that has data, keyed by serverId — useful for training across multiple servers."""
     conn = get_connection()

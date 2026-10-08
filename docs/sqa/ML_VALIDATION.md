@@ -114,7 +114,7 @@ behaviour.
    training window, it becomes "normal". No filtering exists yet.
 3. **One model per server** needs enough history (≥ ~200 rows) before it works.
 4. **Stale inference**: the latest 20 readings are scored even if they are old
-   (server offline), and the whole history is read on each call (DEF-33).
+   (server offline). Each call reads only the newest 200 readings (DEF-33 fixed).
 
 **Next step** toward real-world evidence: record labelled attack sessions on a test VM
 (e.g. a real fork bomb, `stress-ng`, an `iperf` flood) and replay them through the

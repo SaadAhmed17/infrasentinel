@@ -75,7 +75,7 @@ endpoints (AGENT-012, AGENT-015, the `PATCH`/`DELETE /servers/:id` RBAC rows).
 ## Defects
 
 54 logged ([DEFECT_LOG.md](DEFECT_LOG.md)): 2 Critical, 7 High, 27 Medium, 18 Low.
-On `team-dev` (2026-10-08): 36 fixed, 3 partly fixed, 15 open. DEF-46..DEF-54 were
+On `team-dev` (2026-10-09): 37 fixed, 3 partly fixed, 14 open. DEF-46..DEF-54 were
 found during this cycle: DEF-52 by a team member testing forgot password, DEF-54 by
 analysing the team's trained model files, the others while reviewing and testing the
 SIEM and ML code.

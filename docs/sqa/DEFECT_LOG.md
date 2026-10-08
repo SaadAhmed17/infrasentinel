@@ -27,8 +27,8 @@ converted into a normal regression test.
 | Critical | 2 | 0 | 0 | 2 (DEF-01, DEF-38) | 0 |
 | High | 7 | 6 | 0 | 1 (DEF-02) | 0 |
 | Medium | 27 | 20 | 3 (DEF-12, DEF-18, DEF-29) | 4 | 0 |
-| Low | 18 | 10 | 0 | 8 | 0 |
-| **Total** | **54** | **36** | **3** | **15** | **0** |
+| Low | 18 | 11 | 0 | 7 | 0 |
+| **Total** | **54** | **37** | **3** | **14** | **0** |
 
 "Fixed" = the fix is a commit on `team-dev` and its proof test passes (or, for UI-only
 fixes, code review, because the frontend has no test runner yet). "Live" in the evidence
@@ -70,7 +70,7 @@ column means the defect was also observed on the running system (`main`, system 
 | DEF-30 | Low | Test code | Two spec files imported `describe` from `node:test`, shadowing Jest's | ran suite | **Fixed** `6c27fd8` |
 | DEF-31 | Low | Build | `requirements.txt` files are UTF-16 encoded; many tools expect UTF-8 | static review | Open |
 | DEF-32 | Medium | Process | CI ran lint/build only — no tests — and not at all for `team-dev` | CI review | **Fixed** `45ea3b9` (CI for `team-dev` itself was added by `d748e40`); first GitHub run happens on push |
-| DEF-33 | Low | Performance | Inference reads a server's **entire** metric history on every score request | code review | Open — perf test planned |
+| DEF-33 | Low | Performance | Inference reads a server's **entire** metric history on every score request | code review; **live 2026-10-08**: ~6.3 MB per server per 30-second check, the main source of 41 GB of database network transfer | **Fixed** (2026-10-09): scoring reads only the newest 200 readings (~34 KB, same score); ML-INF-008, ML-PIPE-001 pass |
 | DEF-34 | Medium | SIEM | Request-logging middleware records every path as `"/"` on Fastify, so its exclusion list never applies (dashboard polling is logged as potential abuse) | LOG-002, LOG-003 | **Fixed** `a0a6e7f` — LOG-002, 003 pass |
 | DEF-35 | Low | Agent | A network-counter reset yields a negative rate; the API rejects the whole payload, losing that heartbeat | AGENT-MET-005 | Open |
 | DEF-36 | Low | Test code | Scaffold e2e test was Express-based and required a database; always failed | ran suite | **Fixed** `6c27fd8` |
@@ -99,4 +99,4 @@ column means the defect was also observed on the running system (`main`, system 
 2. DEF-38, DEF-39, DEF-40, DEF-31 — dependency changes, prepared in cycle 1, waiting for approval.
 3. DEF-13, DEF-12 (rest) — login throttling and refresh-token rotation (needs a small design decision: limits, token store).
 4. DEF-26, DEF-27, DEF-25 — AI-service timeouts and RAG/LLM hardening (on hold).
-5. DEF-23, DEF-29 (rest), DEF-35, DEF-33, DEF-44, DEF-45.
+5. DEF-23, DEF-29 (rest), DEF-35, DEF-44, DEF-45.
